@@ -47,7 +47,18 @@ type ReservationRow = {
 type ComplianceRow = {
   id: string;
   status: "missing" | "submitted" | "approved" | "exported";
-  reservations: ReservationRelation | ReservationRelation[] | null;
+  reservations: (ReservationRelation & { departure_date: string | null }) | (ReservationRelation & { departure_date: string | null })[] | null;
+  guests: {
+    encrypted_full_name: string;
+    encrypted_date_of_birth: string;
+    encrypted_nationality: string;
+    encrypted_passport_number: string;
+  } | {
+    encrypted_full_name: string;
+    encrypted_date_of_birth: string;
+    encrypted_nationality: string;
+    encrypted_passport_number: string;
+  }[] | null;
 };
 
 type ConversationRow = {
@@ -165,7 +176,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         .eq("organization_id", workspace.organizationId),
       db
         .from("compliance_forms")
-        .select("id, status, reservations(guest_display_name, arrival_date, check_in_token, properties(name))")
+        .select("id, status, reservations(guest_display_name, arrival_date, departure_date, check_in_token, properties(name)), guests(encrypted_full_name, encrypted_date_of_birth, encrypted_nationality, encrypted_passport_number)")
         .eq("organization_id", workspace.organizationId)
         .order("created_at", { ascending: false }),
       db
@@ -241,13 +252,25 @@ export async function getDashboardData(): Promise<DashboardData> {
     (record): ComplianceRecord => {
       const reservation = one(record.reservations);
       const property = one(reservation?.properties);
+      const guest = one(record.guests);
+
+      const missingFields: string[] = [];
+      if (record.status === "missing") {
+        missingFields.push("Check-in form");
+      } else {
+        if (!guest?.encrypted_full_name) missingFields.push("Full Name");
+        if (!guest?.encrypted_date_of_birth) missingFields.push("Date of Birth");
+        if (!guest?.encrypted_nationality) missingFields.push("Nationality");
+        if (!guest?.encrypted_passport_number) missingFields.push("Passport Number");
+        if (!reservation?.departure_date) missingFields.push("Departure Date");
+      }
 
       return {
       arrivalDate: reservation?.arrival_date ?? "Unknown",
       checkInToken: reservation?.check_in_token,
       guestName: reservation?.guest_display_name ?? "Unknown guest",
       id: record.id,
-      missingFields: record.status === "missing" ? ["Check-in form"] : [],
+      missingFields,
       nationality: "Hidden",
       propertyName: property?.name ?? "Unknown property",
       status: record.status,

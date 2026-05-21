@@ -7,17 +7,23 @@ function csvCell(value: string) {
 export function buildComplianceCsv(rows: ComplianceExportRow[]) {
   const header = [
     "guest_name",
-    "property_name",
-    "arrival_date",
+    "date_of_birth",
     "nationality",
+    "passport_number",
+    "arrival_date",
+    "departure_date",
+    "property_name",
   ].join(",");
 
   const body = rows.map((row) =>
     [
       row.guestName,
-      row.propertyName,
-      row.arrivalDate,
+      row.dateOfBirth ?? "",
       row.nationality,
+      row.passportNumber ?? "",
+      row.arrivalDate,
+      row.departureDate ?? "",
+      row.propertyName,
     ]
       .map(csvCell)
       .join(","),

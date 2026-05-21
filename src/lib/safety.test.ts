@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimateMinutesSaved, shouldEscalate } from "./safety";
+import { estimateMinutesSaved, shouldEscalate, getRiskLevel } from "./safety";
 
 describe("message safety gate", () => {
   it("allows routine property questions to be handled automatically", () => {
@@ -10,6 +10,12 @@ describe("message safety gate", () => {
   it("escalates complaints, refunds, and personal document requests", () => {
     expect(shouldEscalate("I want a refund because heating is not working")).toBe(true);
     expect(shouldEscalate("Can I send my passport number here?")).toBe(true);
+  });
+
+  it("determines risk level correctly based on terms", () => {
+    expect(getRiskLevel("What is the Wi-Fi password?")).toBe("low");
+    expect(getRiskLevel("The sink is leaking and there's a flood")).toBe("medium");
+    expect(getRiskLevel("There is a fire and injury, please call police")).toBe("high");
   });
 });
 

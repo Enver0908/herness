@@ -1,5 +1,5 @@
 import { buildSourceContext, rankKnowledgeSources, type KnowledgeSource } from "../knowledge";
-import { shouldEscalate } from "../safety";
+import { getRiskLevel, shouldEscalate } from "../safety";
 import { redactPii } from "./redaction";
 
 export type AiAutomationDecision = {
@@ -29,6 +29,8 @@ export function decideGuestAutomation(input: {
   const blockedReason = getBlockedReason(redaction.redactedText, redaction.piiDetected);
 
   if (blockedReason) {
+    const calculatedRisk = blockedReason === "privacy_or_identity" ? "high" : getRiskLevel(redaction.redactedText);
+
     return {
       canAutoSend: false,
       category,
@@ -38,7 +40,7 @@ export function decideGuestAutomation(input: {
       reason: `Blocked by ${blockedReason}.`,
       redactedMessage: redaction.redactedText,
       reply: safeAcknowledgement,
-      risk: "high",
+      risk: calculatedRisk === "low" ? "high" : calculatedRisk,
       sources,
     } satisfies AiAutomationDecision;
   }
@@ -77,9 +79,13 @@ export function buildAutoReplyPrompt(input: {
   propertyName: string;
 }) {
   return [
-    "You are HostOps CZ, an automated guest operations assistant for short-term rentals in Prague.",
-    "Write a concise, friendly reply that can be sent directly to the guest.",
-    "Use only the approved property knowledge sources below.",
+    "You are HostOps CZ, an automated guest operations assistant for short-term rentals in Prague, Czech Republic.",
+    "Your responses must strictly comply with local Prague policies and Czech short-term rental guidelines:",
+    "- Respect quiet hours (noční klid) from 22:00 (10 PM) to 06:00 (6 AM) as mandated by local laws.",
+    "- Adhere to waste sorting guidelines in Prague (paper, plastic, glass, and municipal waste).",
+    "- Under no circumstances should you agree to waive city tourist taxes (local fees / místní poplatek z pobytu) or provide legal/compliance advice regarding foreign police registration.",
+    "Write a concise, friendly, and professional reply that can be sent directly to the guest.",
+    "Use only the approved property knowledge sources below. Do not invent details or assume anything not written in the sources.",
     "Do not mention passport, date of birth, nationality, visa, identity data, refunds, compensation, legal advice, police, or emergencies.",
     "If the approved sources do not answer the question, say a manager will follow up.",
     `Property: ${input.propertyName}`,

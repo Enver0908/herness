@@ -77,7 +77,10 @@ export type ComplianceExportRow = {
   guestName: string;
   propertyName: string;
   arrivalDate: string;
+  departureDate?: string;
   nationality: string;
+  dateOfBirth?: string;
+  passportNumber?: string;
 };
 
 export type Reservation = {

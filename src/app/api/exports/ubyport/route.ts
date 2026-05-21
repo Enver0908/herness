@@ -15,6 +15,7 @@ type ExportRow = {
 type ReservationRelation = {
   guest_display_name: string;
   arrival_date: string;
+  departure_date: string | null;
   properties: PropertyRelation | PropertyRelation[] | null;
 };
 
@@ -23,7 +24,10 @@ type PropertyRelation = {
 };
 
 type GuestRelation = {
+  encrypted_full_name: string;
+  encrypted_date_of_birth: string;
   encrypted_nationality: string;
+  encrypted_passport_number: string;
 };
 
 export async function GET() {
@@ -41,7 +45,7 @@ export async function GET() {
   const { data, error } = await admin
     .from("compliance_forms")
     .select(
-      "id, reservations(guest_display_name, arrival_date, properties(name)), guests(encrypted_nationality)",
+      "id, reservations(guest_display_name, arrival_date, departure_date, properties(name)), guests(encrypted_full_name, encrypted_date_of_birth, encrypted_nationality, encrypted_passport_number)",
     )
     .eq("organization_id", workspace.organizationId)
     .eq("status", "approved");
@@ -55,12 +59,18 @@ export async function GET() {
     const property = one(reservation?.properties);
     const guest = one(record.guests);
 
+    const decryptedName = guest?.encrypted_full_name ? decryptPii(guest.encrypted_full_name) : "";
+    const decryptedDob = guest?.encrypted_date_of_birth ? decryptPii(guest.encrypted_date_of_birth) : "";
+    const decryptedNationality = guest?.encrypted_nationality ? decryptPii(guest.encrypted_nationality) : "";
+    const decryptedPassport = guest?.encrypted_passport_number ? decryptPii(guest.encrypted_passport_number) : "";
+
     return {
       arrivalDate: reservation?.arrival_date ?? "",
-      guestName: reservation?.guest_display_name ?? "",
-      nationality: guest?.encrypted_nationality
-      ? decryptPii(guest.encrypted_nationality)
-      : "",
+      departureDate: reservation?.departure_date ?? "",
+      guestName: decryptedName || reservation?.guest_display_name || "",
+      dateOfBirth: decryptedDob,
+      passportNumber: decryptedPassport,
+      nationality: decryptedNationality,
       propertyName: property?.name ?? "",
     };
   });
