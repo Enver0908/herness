@@ -45,48 +45,48 @@ const navItems: { href: string; key: NavKey; label: string }[] = [
 ];
 
 const statusStyles: Record<string, string> = {
-  auto_sent: "bg-[var(--accent-green-soft)] text-[var(--accent-green)]",
-  needs_review: "bg-[var(--accent-amber-soft)] text-[var(--accent-amber)]",
-  draft: "bg-[var(--accent-blue-soft)] text-[var(--accent-blue)]",
-  resolved: "bg-[var(--accent-slate-soft)] text-[var(--accent-slate)]",
+  auto_sent: "pill-success",
+  needs_review: "pill-warning",
+  draft: "pill-info",
+  resolved: "pill-muted",
 };
 
 const complianceStyles: Record<string, string> = {
-  missing: "bg-[var(--accent-red-soft)] text-[var(--accent-red)]",
-  submitted: "bg-[var(--accent-blue-soft)] text-[var(--accent-blue)]",
-  approved: "bg-[var(--accent-green-soft)] text-[var(--accent-green)]",
-  exported: "bg-[var(--accent-slate-soft)] text-[var(--accent-slate)]",
+  missing: "pill-danger",
+  submitted: "pill-info",
+  approved: "pill-success",
+  exported: "pill-muted",
 };
 
 const riskStyles: Record<string, string> = {
-  high: "bg-[var(--accent-red-soft)] text-[var(--accent-red)]",
-  low: "bg-[var(--accent-green-soft)] text-[var(--accent-green)]",
-  medium: "bg-[var(--accent-amber-soft)] text-[var(--accent-amber)]",
+  high: "pill-danger",
+  low: "pill-success",
+  medium: "pill-warning",
 };
 
 const deliveryStyles: Record<string, string> = {
-  delivered: "bg-[var(--accent-green-soft)] text-[var(--accent-green)]",
-  failed: "bg-[var(--accent-red-soft)] text-[var(--accent-red)]",
-  not_sent: "bg-[var(--accent-slate-soft)] text-[var(--accent-slate)]",
-  queued: "bg-[var(--accent-blue-soft)] text-[var(--accent-blue)]",
-  sent: "bg-[var(--accent-green-soft)] text-[var(--accent-green)]",
-  simulated: "bg-[var(--accent-blue-soft)] text-[var(--accent-blue)]",
+  delivered: "pill-success",
+  failed: "pill-danger",
+  not_sent: "pill-muted",
+  queued: "pill-info",
+  sent: "pill-success",
+  simulated: "pill-info",
 };
 
 export function DashboardFrame({ active, children, data }: { active: NavKey; children: ReactNode; data: DashboardData }) {
   const firstGuestToken = data.complianceRecords.find((r) => r.checkInToken)?.checkInToken;
 
   return (
-    <main className="min-h-screen bg-[var(--bg-page)]">
-      <header className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-[var(--bg-surface)]">
+    <main className="min-h-screen bg-transparent">
+      <header className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-slate-950/45 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2.5 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-blue)]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-blue)] shadow-[0_0_12px_rgba(59,130,246,0.5)]">
               <ShieldCheck aria-hidden="true" className="text-white" size={16} />
             </div>
             <div className="hidden sm:block">
-              <p className="text-xs font-medium text-[var(--text-muted)]">{data.organizationName}</p>
-              <h1 className="text-sm font-semibold text-[var(--text-primary)]">HostOps CZ</h1>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{data.organizationName}</p>
+              <h1 className="text-xs font-bold text-[var(--text-primary)]">HostOps CZ</h1>
             </div>
           </div>
           <nav className="hidden items-center gap-1 md:flex">
@@ -116,12 +116,12 @@ export function DashboardFrame({ active, children, data }: { active: NavKey; chi
         </nav>
       </header>
 
-      <section className="border-b border-[var(--border-default)] bg-[var(--bg-surface)]">
+      <section className="border-b border-[var(--border-default)] bg-slate-950/20 backdrop-blur-sm">
         <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-[var(--border-subtle)] sm:grid-cols-4">
           {data.metrics.map((metric) => (
-            <div className="px-4 py-3 sm:px-6" key={metric.label}>
-              <p className="text-[0.6875rem] font-medium text-[var(--text-muted)]">{metric.label}</p>
-              <p className="mt-0.5 text-xl font-semibold text-[var(--text-primary)]">{metric.value}</p>
+            <div className="px-4 py-3 sm:px-6 transition-all hover:bg-white/[0.015]" key={metric.label}>
+              <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{metric.label}</p>
+              <p className="mt-0.5 text-2xl font-bold text-[var(--text-primary)] drop-shadow-[0_0_12px_rgba(255,255,255,0.15)]">{metric.value}</p>
               <p className="mt-0.5 text-[0.6875rem] text-[var(--text-tertiary)]">{metric.detail}</p>
             </div>
           ))}
