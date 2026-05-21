@@ -90,8 +90,8 @@ Below are mockups illustrating the user interface of the HostOps CZ platform:
 ### Local Development Setup
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/Enver0908/herness.git
-   cd herness
+   git clone https://github.com/Enver0908/hostops-cz.git
+   cd hostops-cz
    ```
 2. **Install dependencies**:
    ```bash
