@@ -1,0 +1,3 @@
+{$HOSTOPS_DOMAIN} {
+	reverse_proxy hostops-cz:3000
+}

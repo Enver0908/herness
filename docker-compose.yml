@@ -1,0 +1,30 @@
+services:
+  hostops-cz:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    env_file:
+      - ${HOSTOPS_ENV_FILE:-.env}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - hostops-cz
+    environment:
+      - HOSTOPS_DOMAIN=${HOSTOPS_DOMAIN:-:80}
+    ports:
+      - "${HOSTOPS_HTTP_PORT:-80}:80"
+      - "${HOSTOPS_HTTPS_PORT:-443}:443"
+    restart: unless-stopped
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
