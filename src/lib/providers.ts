@@ -8,7 +8,7 @@ export type SendMessageInput = {
 export type SendMessageResult = {
   provider: string;
   providerMessageId?: string;
-  status: "sent" | "failed";
+  status: "sent" | "failed" | "simulated";
 };
 
 export async function sendOutboundMessage(input: SendMessageInput): Promise<SendMessageResult> {
@@ -19,12 +19,16 @@ export async function sendOutboundMessage(input: SendMessageInput): Promise<Send
   return sendEmailMessage(input);
 }
 
-async function sendWhatsAppMessage(input: SendMessageInput): Promise<SendMessageResult> {
+export async function sendWhatsAppMessage(input: SendMessageInput): Promise<SendMessageResult> {
   const accessToken = process.env.META_WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
 
   if (!accessToken || !phoneNumberId) {
-    throw new Error("WhatsApp outbound is not configured.");
+    return {
+      provider: "simulated_whatsapp",
+      providerMessageId: `sim-wa-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      status: "simulated",
+    };
   }
 
   const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
@@ -55,12 +59,16 @@ async function sendWhatsAppMessage(input: SendMessageInput): Promise<SendMessage
   };
 }
 
-async function sendEmailMessage(input: SendMessageInput): Promise<SendMessageResult> {
+export async function sendEmailMessage(input: SendMessageInput): Promise<SendMessageResult> {
   const apiKey = process.env.MAILGUN_API_KEY;
   const domain = process.env.MAILGUN_DOMAIN;
 
   if (!apiKey || !domain) {
-    throw new Error("Mailgun outbound is not configured.");
+    return {
+      provider: "simulated_email",
+      providerMessageId: `sim-mg-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      status: "simulated",
+    };
   }
 
   const formData = new FormData();

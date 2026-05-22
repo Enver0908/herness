@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import type { ElementType, ReactNode } from "react";
+import { useState, useTransition, useMemo, useEffect, ElementType, ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -16,6 +18,19 @@ import {
   Search,
   User,
   ChevronRight,
+  Home,
+  Building,
+  Calendar,
+  FileText,
+  RefreshCw,
+  MessageSquare,
+  BookOpen,
+  Settings,
+  Send,
+  Clock,
+  Sparkles,
+  Check,
+  AlertCircle
 } from "lucide-react";
 import type { DashboardData } from "@/lib/types";
 import {
@@ -35,17 +50,22 @@ import {
   updateKnowledgeDocument,
   updateProperty,
   updateReservation,
+  approveAndSendCustomReply,
+  updateOrganizationSettings,
+  triggerUbyportSync,
 } from "./actions";
 
-type NavKey = "overview" | "compliance" | "messages" | "reservations" | "properties" | "knowledge";
+type NavKey = "overview" | "compliance" | "messages" | "reservations" | "properties" | "knowledge" | "sync" | "settings";
 
-const navItems: { href: string; key: NavKey; label: string }[] = [
-  { href: "/dashboard", key: "overview", label: "Dashboard" },
-  { href: "/dashboard/properties", key: "properties", label: "Listings" },
-  { href: "/dashboard/reservations", key: "reservations", label: "Bookings" },
-  { href: "/dashboard/compliance", key: "compliance", label: "Compliance" },
-  { href: "/dashboard/messages", key: "messages", label: "Messages" },
-  { href: "/dashboard/knowledge", key: "knowledge", label: "Knowledge" },
+const navItems: { href: string; key: NavKey; label: string; icon: ElementType }[] = [
+  { href: "/dashboard", key: "overview", label: "Dashboard", icon: Home },
+  { href: "/dashboard/properties", key: "properties", label: "Listings", icon: Building },
+  { href: "/dashboard/reservations", key: "reservations", label: "Bookings", icon: Calendar },
+  { href: "/dashboard/compliance", key: "compliance", label: "Compliance", icon: FileText },
+  { href: "/dashboard/sync", key: "sync", label: "Sync", icon: RefreshCw },
+  { href: "/dashboard/messages", key: "messages", label: "Messages", icon: MessageSquare },
+  { href: "/dashboard/knowledge", key: "knowledge", label: "Knowledge", icon: BookOpen },
+  { href: "/dashboard/settings", key: "settings", label: "Settings", icon: Settings },
 ];
 
 const statusStyles: Record<string, string> = {
@@ -87,29 +107,124 @@ export function DashboardFrame({ active, children, data }: { active: NavKey; chi
   const activeListings = data.properties.length;
 
   return (
-    <main className="min-h-screen bg-transparent pb-12">
-      <header className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-slate-950/45 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            {/* Custom HostOps tricolor Czech shield SVG logo */}
-            <svg className="h-7 w-7" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div className="min-h-screen flex bg-transparent">
+      {/* Desktop left sidebar */}
+      <aside className="hidden md:flex flex-col w-64 bg-slate-950/70 border-r border-[var(--border-default)] backdrop-blur-md shrink-0 sticky top-0 h-screen p-5 justify-between z-40">
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center gap-3">
+            {/* Tricolor Czech shield SVG */}
+            <svg className="h-8 w-8 shrink-0" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M50 5L15 25V75L50 95L85 75V25L50 5Z" fill="#0d182e" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
               <path d="M50 5L15 25V75L50 50Z" fill="#3b82f6" />
               <path d="M50 50L85 75V25L50 5Z" fill="#ef4444" />
               <path d="M15 75L50 95L85 75L50 50Z" fill="#ffffff" />
             </svg>
-            <span className="font-display font-bold text-base tracking-tight text-white hidden sm:block">HostOps CZ</span>
+            <div className="flex flex-col animate-fade-in">
+              <span className="font-display font-extrabold text-base tracking-tight text-white leading-tight">HostOps CZ</span>
+              <span className="text-[10px] text-[var(--text-muted)] font-medium">Compliance & Automation</span>
+            </div>
           </div>
 
-          <nav className="hidden items-center gap-4 md:flex ml-6 h-full">
+          <nav className="flex flex-col gap-1.5">
+            {navItems.map((item) => {
+              const isActive = item.key === active;
+              const Icon = item.icon;
+              return (
+                <Link
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+                    isActive
+                      ? "bg-[var(--accent-blue-soft)] text-white border border-[rgba(59,130,246,0.25)] shadow-[0_0_10px_rgba(59,130,246,0.15)]"
+                      : "text-[var(--text-tertiary)] hover:text-white hover:bg-white/5 border border-transparent"
+                  }`}
+                  href={item.href}
+                  key={item.key}
+                  prefetch={false}
+                >
+                  <Icon size={14} className={isActive ? "text-blue-400" : "text-[var(--text-muted)]"} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="flex flex-col gap-4 border-t border-white/10 pt-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white border border-white/20 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
+              AS
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-xs font-bold text-white">Alex S. Admin</span>
+              <span className="text-[9px] text-[var(--text-muted)]">Operations Manager</span>
+            </div>
+          </div>
+          <Link className="nav-link inline-flex items-center gap-2 hover:text-white mt-1 border border-white/5 py-1.5" href="/logout">
+            <LogOut size={13} /> <span className="text-xs">Logout</span>
+          </Link>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Sticky Header */}
+        <header className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-slate-950/45 backdrop-blur-md py-3.5 px-4 sm:px-6">
+          <div className="flex items-center justify-between">
+            {/* Brand elements for mobile view only */}
+            <div className="flex items-center gap-2.5 md:hidden">
+              <svg className="h-6 w-6 shrink-0" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 5L15 25V75L50 95L85 75V25L50 5Z" fill="#0d182e" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
+                <path d="M50 5L15 25V75L50 50Z" fill="#3b82f6" />
+                <path d="M50 50L85 75V25L50 5Z" fill="#ef4444" />
+                <path d="M15 75L50 95L85 75L50 50Z" fill="#ffffff" />
+              </svg>
+              <span className="font-display font-bold text-sm tracking-tight text-white">HostOps CZ</span>
+            </div>
+
+            {/* Desktop utilities */}
+            <div className="hidden md:flex items-center gap-4 w-72 relative">
+              <Search className="absolute left-3 top-2.5 text-[var(--text-muted)]" size={13} />
+              <input
+                type="text"
+                placeholder="Search resources, records..."
+                className="header-search pl-9 pr-4 py-2 w-full focus:outline-none bg-slate-900/50 border border-white/5 rounded-lg text-xs"
+              />
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="text-xs font-semibold text-[var(--text-muted)] bg-white/5 border border-white/10 rounded-md px-3 py-1.5 backdrop-blur-sm">
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </div>
+
+              {/* Notification Badge */}
+              <div className="relative cursor-pointer p-1.5 text-[var(--text-secondary)] hover:text-white transition-colors">
+                <Bell size={16} />
+                <span className="absolute top-0 right-0 flex h-3 w-3 items-center justify-center rounded-full bg-blue-500 text-[8px] font-bold text-white">5</span>
+              </div>
+
+              {/* Profile display for mobile only */}
+              <div className="flex items-center gap-2 border-l border-white/10 pl-3 md:hidden">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white border border-white/20">
+                  AS
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Navigation Scrollbar */}
+          <nav className="flex gap-2 overflow-x-auto border-t border-[var(--border-subtle)] mt-2 pt-2 md:hidden">
             {navItems.map((item) => {
               const isActive = item.key === active;
               return (
                 <Link
-                  className={`text-xs font-semibold tracking-wide transition-all py-3 border-b-2 ${
+                  className={`text-xs font-semibold shrink-0 px-3 py-1.5 rounded-full transition-all ${
                     isActive
-                      ? "border-white text-white font-bold"
-                      : "border-transparent text-[var(--text-tertiary)] hover:text-white"
+                      ? "bg-white/10 text-white font-bold border border-white/10"
+                      : "text-[var(--text-tertiary)] hover:text-white"
                   }`}
                   href={item.href}
                   key={item.key}
@@ -120,140 +235,88 @@ export function DashboardFrame({ active, children, data }: { active: NavKey; chi
               );
             })}
           </nav>
+        </header>
 
-          <div className="flex items-center gap-4">
-            {/* Search Input */}
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-2 text-[var(--text-muted)]" size={13} />
-              <input
-                type="text"
-                placeholder="Search listings..."
-                className="header-search pl-8 focus:outline-none"
-              />
-            </div>
-
-            {/* Notification Icon */}
-            <div className="relative cursor-pointer p-1.5 text-[var(--text-secondary)] hover:text-white transition-colors">
-              <Bell size={16} />
-              <span className="absolute top-0 right-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-500 text-[8px] font-bold text-white">5</span>
-            </div>
-
-            {/* Profile */}
-            <div className="flex items-center gap-2 border-l border-white/10 pl-3">
-              <span className="hidden text-xs font-semibold text-[var(--text-secondary)] lg:block">Jana Nováková</span>
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white border border-white/20">
-                JN
+        {/* Content wrap */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 w-full">
+          {/* Metrics Ribbon for Overview page */}
+          {active === "overview" && (
+            <section className="mb-6 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Card 1: Hours Saved (Green glow) */}
+              <div className="glass-card glow-green p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+                <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  <span>Hours saved this week</span>
+                  <ChevronRight size={14} className="text-white/40" />
+                </div>
+                <div className="z-10">
+                  <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                    {hoursSaved.toFixed(1)} hours
+                  </p>
+                  <p className="text-[0.6875rem] text-[var(--accent-green)] mt-1 font-medium">Efficiency boosted</p>
+                </div>
+                <svg className="absolute bottom-0 left-0 w-full h-12 stroke-[var(--accent-green)] opacity-60 pointer-events-none" viewBox="0 0 100 30" preserveAspectRatio="none">
+                  <path d="M0,25 Q15,10 30,22 T60,5 T90,18 T100,8" fill="none" strokeWidth="1.5" />
+                </svg>
               </div>
-            </div>
 
-            {/* Logout */}
-            <Link className="nav-link inline-flex items-center gap-1.5 hover:text-white" href="/logout">
-              <LogOut aria-hidden="true" size={13} /> <span className="hidden sm:inline">Logout</span>
-            </Link>
-          </div>
+              {/* Card 2: Auto-resolved Messages (Blue glow) */}
+              <div className="glass-card glow-blue p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+                <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  <span>Auto-resolved messages</span>
+                  <ChevronRight size={14} className="text-white/40" />
+                </div>
+                <div className="z-10">
+                  <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                    {autoResolved}
+                  </p>
+                  <p className="text-[0.6875rem] text-blue-400 mt-1 font-medium">AI Assistant: 94%</p>
+                </div>
+                <MessageSquareText className="absolute right-4 bottom-4 text-blue-400 opacity-20 pointer-events-none" size={48} />
+              </div>
+
+              {/* Card 3: Needs human review (Amber glow) */}
+              <div className="glass-card glow-amber p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+                <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  <span>Needs human review</span>
+                  <ChevronRight size={14} className="text-white/40" />
+                </div>
+                <div className="z-10">
+                  <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                    {needsReview}
+                  </p>
+                  <p className="text-[0.6875rem] text-[var(--accent-amber)] mt-1 font-medium">Urgent pending cases</p>
+                </div>
+                <AlertTriangle className="absolute right-4 bottom-4 text-amber-500 opacity-20 pointer-events-none" size={48} />
+              </div>
+
+              {/* Card 4: Active Listings (Cyan glow) */}
+              <div className="glass-card glow-cyan p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+                <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  <span>Active Listings</span>
+                  <ChevronRight size={14} className="text-white/40" />
+                </div>
+                <div className="z-10">
+                  <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                    {activeListings}
+                  </p>
+                  <p className="text-[0.6875rem] text-cyan-400 mt-1 font-medium">Avg. Occupancy: 86%</p>
+                </div>
+                <svg className="absolute bottom-0 right-4 w-24 h-12 stroke-[var(--accent-cyan)] opacity-30 pointer-events-none" viewBox="0 0 100 30">
+                  <line x1="10" y1="30" x2="10" y2="12" strokeWidth="4" strokeLinecap="round" />
+                  <line x1="25" y1="30" x2="25" y2="18" strokeWidth="4" strokeLinecap="round" />
+                  <line x1="40" y1="30" x2="40" y2="8" strokeWidth="4" strokeLinecap="round" />
+                  <line x1="55" y1="30" x2="55" y2="22" strokeWidth="4" strokeLinecap="round" />
+                  <line x1="70" y1="30" x2="70" y2="10" strokeWidth="4" strokeLinecap="round" />
+                  <line x1="85" y1="30" x2="85" y2="14" strokeWidth="4" strokeLinecap="round" />
+                </svg>
+              </div>
+            </section>
+          )}
+
+          <div className="grid gap-5">{children}</div>
         </div>
-
-        {/* Mobile Navigation */}
-        <nav className="flex gap-2 overflow-x-auto border-t border-[var(--border-subtle)] px-4 py-2 md:hidden">
-          {navItems.map((item) => {
-            const isActive = item.key === active;
-            return (
-              <Link
-                className={`text-xs font-semibold shrink-0 px-3 py-1.5 rounded-full ${
-                  isActive
-                    ? "bg-white/10 text-white font-bold border border-white/10"
-                    : "text-[var(--text-tertiary)] hover:text-white"
-                }`}
-                href={item.href}
-                key={item.key}
-                prefetch={false}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </header>
-
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        {/* Only show metrics ribbon on the main Overview page */}
-        {active === "overview" && (
-          <section className="mb-6 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Card 1: Hours Saved (Green glow) */}
-            <div className="glass-card glow-green p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
-              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                <span>Hours saved this week</span>
-                <ChevronRight size={14} className="text-white/40" />
-              </div>
-              <div className="z-10">
-                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
-                  {hoursSaved.toFixed(1)} hours
-                </p>
-                <p className="text-[0.6875rem] text-[var(--accent-green)] mt-1 font-medium">Efficiency boosted</p>
-              </div>
-              {/* Green Sparkline */}
-              <svg className="absolute bottom-0 left-0 w-full h-12 stroke-[var(--accent-green)] opacity-60 pointer-events-none" viewBox="0 0 100 30" preserveAspectRatio="none">
-                <path d="M0,25 Q15,10 30,22 T60,5 T90,18 T100,8" fill="none" strokeWidth="1.5" />
-              </svg>
-            </div>
-
-            {/* Card 2: Auto-resolved Messages (Blue glow) */}
-            <div className="glass-card glow-blue p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
-              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                <span>Auto-resolved messages</span>
-                <ChevronRight size={14} className="text-white/40" />
-              </div>
-              <div className="z-10">
-                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
-                  {autoResolved}
-                </p>
-                <p className="text-[0.6875rem] text-blue-400 mt-1 font-medium">AI Assistant: 94%</p>
-              </div>
-              <MessageSquareText className="absolute right-4 bottom-4 text-blue-400 opacity-20 pointer-events-none" size={48} />
-            </div>
-
-            {/* Card 3: Needs human review (Amber glow) */}
-            <div className="glass-card glow-amber p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
-              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                <span>Needs human review</span>
-                <ChevronRight size={14} className="text-white/40" />
-              </div>
-              <div className="z-10">
-                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
-                  {needsReview}
-                </p>
-                <p className="text-[0.6875rem] text-[var(--accent-amber)] mt-1 font-medium">Urgent pending cases</p>
-              </div>
-              <AlertTriangle className="absolute right-4 bottom-4 text-amber-500 opacity-20 pointer-events-none" size={48} />
-            </div>
-
-            {/* Card 4: Active Listings (Cyan glow) */}
-            <div className="glass-card glow-cyan p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
-              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                <span>Active Listings</span>
-                <ChevronRight size={14} className="text-white/40" />
-              </div>
-              <div className="z-10">
-                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
-                  {activeListings}
-                </p>
-                <p className="text-[0.6875rem] text-cyan-400 mt-1 font-medium">Avg. Occupancy: 86%</p>
-              </div>
-              {/* Cyan Sparkline bars */}
-              <svg className="absolute bottom-0 right-4 w-24 h-12 stroke-[var(--accent-cyan)] opacity-30 pointer-events-none" viewBox="0 0 100 30">
-                <line x1="10" y1="30" x2="10" y2="12" strokeWidth="4" strokeLinecap="round" />
-                <line x1="25" y1="30" x2="25" y2="18" strokeWidth="4" strokeLinecap="round" />
-                <line x1="40" y1="30" x2="40" y2="8" strokeWidth="4" strokeLinecap="round" />
-                <line x1="55" y1="30" x2="55" y2="22" strokeWidth="4" strokeLinecap="round" />
-                <line x1="70" y1="30" x2="70" y2="10" strokeWidth="4" strokeLinecap="round" />
-                <line x1="85" y1="30" x2="85" y2="14" strokeWidth="4" strokeLinecap="round" />
-              </svg>
-            </div>
-          </section>
-        )}
-        <div className="grid gap-5">{children}</div>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -314,78 +377,871 @@ export function RecentMessages({ conversations }: { conversations: DashboardData
 }
 
 export function CompliancePageContent({ data }: { data: DashboardData }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const total = data.complianceRecords.length;
+    const missing = data.complianceRecords.filter(r => r.status === "missing").length;
+    const submitted = data.complianceRecords.filter(r => r.status === "submitted").length;
+    const approved = data.complianceRecords.filter(r => r.status === "approved").length;
+    const exported = data.complianceRecords.filter(r => r.status === "exported").length;
+    return { total, missing, submitted, approved, exported };
+  }, [data.complianceRecords]);
+
+  // Filter compliance records
+  const filteredRecords = useMemo(() => {
+    return data.complianceRecords.filter(record => {
+      const matchSearch =
+        record.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        record.propertyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (record.ubyportId && record.ubyportId.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchStatus = statusFilter === "all" || record.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [data.complianceRecords, searchTerm, statusFilter]);
+
+  // Paginated records
+  const paginatedRecords = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredRecords.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredRecords, currentPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / itemsPerPage));
+
+  // Reset page on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
   return (
-    <Panel
-      action={
-        <a className="icon-button" href="/api/exports/ubyport" title="Download Ubyport export">
-          <Download aria-hidden="true" size={15} />
-        </a>
-      }
-      title="Compliance queue"
-    >
-      {data.complianceRecords.length === 0 ? (
-        <EmptyState text="No compliance records yet. Create a reservation to generate a guest form." />
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="responsive-table w-full border-collapse text-left text-[0.8125rem]">
-            <thead>
-              <tr className="border-b border-[var(--border-subtle)] text-[0.6875rem] font-medium uppercase text-[var(--text-muted)]">
-                <th className="px-3 py-2">Guest</th>
-                <th className="px-3 py-2">Property</th>
-                <th className="px-3 py-2">Arrival</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border-subtle)]">
-              {data.complianceRecords.map((record) => (
-                <tr className="transition-colors hover:bg-[var(--bg-muted)]" key={record.id}>
-                  <td className="px-3 py-2.5" data-label="Guest">{record.guestName}</td>
-                  <td className="px-3 py-2.5" data-label="Property">{record.propertyName}</td>
-                  <td className="px-3 py-2.5" data-label="Arrival">{record.arrivalDate}</td>
-                  <td className="px-3 py-2.5" data-label="Status">
-                    <span className={`pill ${complianceStyles[record.status]}`}>{record.status}</span>
-                    {record.missingFields.length > 0 ? <p className="mt-1 text-[0.6875rem] text-[var(--accent-red)]">Missing: {record.missingFields.join(", ")}</p> : null}
-                  </td>
-                  <td className="px-3 py-2.5" data-label="Actions">
-                    <ComplianceActions record={record} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="grid gap-5">
+      {/* Statistics Cards */}
+      <section className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+        <div className="glass-card p-4 flex flex-col justify-between border-l-2 border-slate-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Total Forms</span>
+          <span className="text-2xl font-extrabold text-white mt-1 leading-none">{stats.total}</span>
         </div>
-      )}
-    </Panel>
+        <div className="glass-card p-4 flex flex-col justify-between border-l-2 border-red-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Missing Forms</span>
+          <span className="text-2xl font-extrabold text-red-500 mt-1 leading-none">{stats.missing}</span>
+        </div>
+        <div className="glass-card p-4 flex flex-col justify-between border-l-2 border-blue-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Submitted</span>
+          <span className="text-2xl font-extrabold text-blue-500 mt-1 leading-none">{stats.submitted}</span>
+        </div>
+        <div className="glass-card p-4 flex flex-col justify-between border-l-2 border-emerald-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Approved</span>
+          <span className="text-2xl font-extrabold text-emerald-500 mt-1 leading-none">{stats.approved}</span>
+        </div>
+        <div className="glass-card p-4 flex flex-col justify-between border-l-2 border-slate-600">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Exported</span>
+          <span className="text-2xl font-extrabold text-slate-400 mt-1 leading-none">{stats.exported}</span>
+        </div>
+      </section>
+
+      {/* Main Grid Panel */}
+      <Panel
+        action={
+          <div className="flex gap-2">
+            <a className="icon-button" href="/api/exports/ubyport" title="Download Ubyport export CSV">
+              <Download aria-hidden="true" size={15} />
+            </a>
+          </div>
+        }
+        title="Compliance Reports Queue"
+      >
+        {/* Table Filters */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between mb-4 border-b border-white/5 pb-4">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 text-[var(--text-muted)]" size={13} />
+            <input
+              type="text"
+              placeholder="Filter by guest name, property..."
+              className="field-input pl-8 py-1.5 text-xs w-full focus:outline-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            {["all", "missing", "submitted", "approved", "exported"].map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-3 py-1 rounded-full text-[10px] font-semibold capitalize border transition-all ${
+                  statusFilter === status
+                    ? "bg-blue-600 border-blue-500 text-white shadow-[0_0_8px_rgba(59,130,246,0.3)]"
+                    : "bg-white/5 border-white/5 text-[var(--text-tertiary)] hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredRecords.length === 0 ? (
+          <EmptyState text="No compliance records found matching your filters." />
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="overflow-x-auto">
+              <table className="responsive-table w-full border-collapse text-left text-[0.8125rem]">
+                <thead>
+                  <tr className="border-b border-[var(--border-subtle)] text-[0.6875rem] font-medium uppercase text-[var(--text-muted)]">
+                    <th className="px-3 py-2">Guest Name</th>
+                    <th className="px-3 py-2">Property</th>
+                    <th className="px-3 py-2">Check-in / Check-out</th>
+                    <th className="px-3 py-2">Nationality</th>
+                    <th className="px-3 py-2">Ubyport ID</th>
+                    <th className="px-3 py-2">Registration Status</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-subtle)]">
+                  {paginatedRecords.map((record) => (
+                    <tr className="transition-colors hover:bg-[var(--bg-muted)]" key={record.id}>
+                      <td className="px-3 py-2.5 font-medium" data-label="Guest">{record.guestName}</td>
+                      <td className="px-3 py-2.5" data-label="Property">{record.propertyName}</td>
+                      <td className="px-3 py-2.5 text-xs font-mono text-[var(--text-secondary)]" data-label="Arrival/Departure">
+                        {record.arrivalDate} {record.departureDate ? ` / ${record.departureDate}` : ""}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-[var(--text-secondary)]" data-label="Nationality">
+                        {record.nationality}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs font-mono font-semibold text-blue-400" data-label="Ubyport ID">
+                        {record.ubyportId}
+                      </td>
+                      <td className="px-3 py-2.5" data-label="Status">
+                        <span className={`pill ${complianceStyles[record.status]}`}>{record.status}</span>
+                        {record.missingFields.length > 0 ? (
+                          <p className="mt-1 text-[0.6875rem] text-[var(--accent-red)]">
+                            Missing: {record.missingFields.join(", ")}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2.5" data-label="Actions">
+                        <ComplianceActions record={record} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                <span className="text-[10px] text-[var(--text-muted)] font-medium">
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredRecords.length)} of {filteredRecords.length} records
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2.5 py-1 text-[10px] font-semibold bg-white/5 rounded border border-white/5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/10 text-white transition-colors"
+                  >
+                    Previous
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-all ${
+                        currentPage === page
+                          ? "bg-blue-600 border-blue-500 text-white"
+                          : "bg-white/5 border-white/5 text-[var(--text-tertiary)] hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-2.5 py-1 text-[10px] font-semibold bg-white/5 rounded border border-white/5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/10 text-white transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }
 
 export function MessagesPageContent({ data }: { data: DashboardData }) {
+  const [selectedId, setSelectedId] = useState<string | null>(
+    data.conversations.length > 0 ? data.conversations[0].id : null
+  );
+  const [filter, setFilter] = useState<"all" | "needs_review" | "resolved" | "auto_sent">("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [replyText, setReplyText] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  // Find selected conversation
+  const selectedConversation = useMemo(() => {
+    return data.conversations.find((c) => c.id === selectedId) || null;
+  }, [data.conversations, selectedId]);
+
+  // Sync draft reply text when conversation changes
+  useEffect(() => {
+    if (selectedConversation) {
+      setReplyText(selectedConversation.aiReply && selectedConversation.aiReply !== "No AI draft yet." ? selectedConversation.aiReply : "");
+    } else {
+      setReplyText("");
+    }
+  }, [selectedConversation]);
+
+  // Filter conversations
+  const filteredConversations = useMemo(() => {
+    return data.conversations.filter((c) => {
+      const matchSearch =
+        c.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.propertyName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchFilter =
+        filter === "all" ||
+        (filter === "needs_review" && c.status === "needs_review") ||
+        (filter === "resolved" && c.status === "resolved") ||
+        (filter === "auto_sent" && c.status === "auto_sent");
+      return matchSearch && matchFilter;
+    });
+  }, [data.conversations, searchTerm, filter]);
+
+  // Actions
+  const handleSendCustom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedId || !replyText.trim()) return;
+    const formData = new FormData();
+    formData.append("conversationId", selectedId);
+    formData.append("customBody", replyText);
+    startTransition(async () => {
+      try {
+        await approveAndSendCustomReply(formData);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to send message");
+      }
+    });
+  };
+
+  const handleSendDraft = async () => {
+    if (!selectedId || !selectedConversation) return;
+    const draftText = selectedConversation.aiReply;
+    if (!draftText || draftText === "No AI draft yet.") {
+      alert("No draft response is currently available.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("conversationId", selectedId);
+    formData.append("customBody", draftText);
+    startTransition(async () => {
+      try {
+        await approveAndSendCustomReply(formData);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to send draft");
+      }
+    });
+  };
+
+  const handleRunAutomation = async () => {
+    if (!selectedId) return;
+    const formData = new FormData();
+    formData.append("conversationId", selectedId);
+    startTransition(async () => {
+      try {
+        await runAiAutomation(formData);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to trigger AI automation");
+      }
+    });
+  };
+
+  const handleGenerateDraft = async () => {
+    if (!selectedId) return;
+    const formData = new FormData();
+    formData.append("conversationId", selectedId);
+    startTransition(async () => {
+      try {
+        await generateAiDraft(formData);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to generate AI draft");
+      }
+    });
+  };
+
+  // Find related reservation for check-in/out dates
+  const selectedReservation = useMemo(() => {
+    if (!selectedConversation) return null;
+    return data.reservations.find(r => r.guestName === selectedConversation.guestName) || null;
+  }, [data.reservations, selectedConversation]);
+
+  const settings = data.organizationSettings;
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-      <Panel
-        action={
-          <span className="internal-only-banner">
-            <ShieldAlert aria-hidden="true" size={12} />
-            Auto-send guarded
-          </span>
-        }
-        title="AI automation queue"
-      >
-        {data.conversations.length === 0 ? (
-          <EmptyState text="No guest conversations yet. WhatsApp, email, and PMS webhooks populate this queue." />
-        ) : (
-          <div className="grid gap-3">
-            {data.conversations.map((conversation) => (
-              <ConversationCard conversation={conversation} key={conversation.id} />
+    <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-5 min-h-[650px] bg-slate-900/10 border border-white/5 rounded-xl overflow-hidden backdrop-blur-sm">
+      {/* Left panel: Conversation list */}
+      <div className="flex flex-col border-r border-white/5 bg-slate-950/40 h-[650px]">
+        {/* Search & Tabs */}
+        <div className="p-4 flex flex-col gap-3 border-b border-white/5 shrink-0 bg-slate-950/20">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 text-[var(--text-muted)]" size={13} />
+            <input
+              type="text"
+              placeholder="Search chats..."
+              className="field-input pl-8 py-1.5 text-xs w-full focus:outline-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            {(["all", "needs_review", "resolved", "auto_sent"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setFilter(tab)}
+                className={`py-1.5 px-0.5 rounded text-[9px] font-bold uppercase text-center border transition-all truncate ${
+                  filter === tab
+                    ? "bg-blue-600/30 border-blue-500/50 text-blue-400"
+                    : "bg-transparent border-transparent text-[var(--text-muted)] hover:text-white hover:bg-white/5"
+                }`}
+                title={tab.replace("_", " ")}
+              >
+                {tab === "needs_review" ? "Review" : tab === "auto_sent" ? "Auto" : tab}
+              </button>
             ))}
           </div>
-        )}
-      </Panel>
-      <div className="grid content-start gap-5">
-        <CasesPanel data={data} />
-        <TasksPanel data={data} />
+        </div>
+
+        {/* Scrollable Conversation List */}
+        <div className="flex-1 overflow-y-auto divide-y divide-white/5">
+          {filteredConversations.length === 0 ? (
+            <div className="p-4 text-center">
+              <p className="text-xs text-[var(--text-muted)]">No chats found.</p>
+            </div>
+          ) : (
+            filteredConversations.map((c) => {
+              const isActive = c.id === selectedId;
+              const hasDraft = c.aiReply && c.aiReply !== "No AI draft yet.";
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => setSelectedId(c.id)}
+                  className={`p-3.5 cursor-pointer transition-all flex flex-col gap-1.5 hover:bg-white/5 ${
+                    isActive ? "bg-blue-600/10 border-l-2 border-blue-500" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-bold text-white truncate max-w-[150px]">{c.guestName}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className={`pill ${riskStyles[c.risk]} text-[8px] px-1 py-0.5`}>{c.risk}</span>
+                      <span className={`pill ${statusStyles[c.status]} text-[8px] px-1 py-0.5`}>{c.status.replace("_", " ")}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                    <span className="truncate">{c.propertyName}</span>
+                    <span className="shrink-0">{c.channel}</span>
+                  </div>
+                  <p className="text-[11px] leading-snug text-[var(--text-secondary)] line-clamp-2">
+                    {c.lastMessage}
+                  </p>
+                  {hasDraft && c.status === "needs_review" && (
+                    <div className="mt-1 flex items-center gap-1.5 text-[9px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded w-fit">
+                      <Sparkles size={8} /> AI Draft Prepared
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
+
+      {/* Right panel: Workspace */}
+      <div className="flex flex-col h-[650px] bg-slate-950/20">
+        {selectedConversation ? (
+          <>
+            {/* Workspace Header */}
+            <div className="p-4 border-b border-white/5 flex flex-col gap-2 bg-slate-950/40 shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">{selectedConversation.guestName}</h3>
+                  <p className="text-xs text-[var(--text-tertiary)]">
+                    {selectedConversation.propertyName} · {selectedConversation.channel} · Language: {selectedConversation.language}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedReservation && (
+                    <span className="text-[10px] font-semibold bg-white/5 border border-white/10 text-[var(--text-secondary)] px-2.5 py-1 rounded">
+                      Status: {selectedReservation.reservationStatus}
+                    </span>
+                  )}
+                  <span className={`pill ${statusStyles[selectedConversation.status]}`}>
+                    {selectedConversation.status.replace("_", " ")}
+                  </span>
+                </div>
+              </div>
+
+              {selectedReservation && (
+                <div className="text-[10px] text-[var(--text-muted)] flex flex-wrap gap-x-4 gap-y-1">
+                  <span>Check-in: <strong className="text-white">{selectedReservation.arrivalDate}</strong></span>
+                  {selectedReservation.departureDate && (
+                    <span>Check-out: <strong className="text-white">{selectedReservation.departureDate}</strong></span>
+                  )}
+                  {selectedReservation.guestEmail && (
+                    <span>Email: <strong className="text-white">{selectedReservation.guestEmail}</strong></span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Message Feed Area */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-[var(--bg-inset)]">
+              {selectedConversation.messages && selectedConversation.messages.length > 0 ? (
+                selectedConversation.messages.map((msg) => {
+                  if (msg.direction === "inbound") {
+                    return (
+                      <div key={msg.id} className="flex gap-2 max-w-[85%] self-start animate-fade-in">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-[9px] font-bold text-white shrink-0">
+                          G
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <div className="bg-slate-800/80 border border-white/5 p-3 rounded-2xl rounded-tl-none text-xs text-[var(--text-secondary)] leading-relaxed">
+                            {msg.body}
+                          </div>
+                          <span className="text-[9px] text-[var(--text-muted)] ml-1">
+                            {new Date(msg.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  } else if (msg.direction === "outbound") {
+                    return (
+                      <div key={msg.id} className="flex gap-2 max-w-[85%] self-end flex-row-reverse animate-fade-in">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white shrink-0">
+                          A
+                        </div>
+                        <div className="flex flex-col gap-1 items-end">
+                          <div className="bg-blue-600/25 border border-blue-500/30 p-3 rounded-2xl rounded-tr-none text-xs text-white leading-relaxed">
+                            {msg.body}
+                          </div>
+                          <span className="text-[9px] text-[var(--text-muted)] mr-1">
+                            {new Date(msg.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // ai_draft message representation
+                    return (
+                      <div key={msg.id} className="flex gap-2 max-w-[85%] self-end flex-row-reverse animate-fade-in">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-600 text-[9px] font-bold text-white shrink-0">
+                          AI
+                        </div>
+                        <div className="flex flex-col gap-1 items-end">
+                          <div className="bg-amber-500/5 border border-dashed border-amber-500/40 p-3 rounded-2xl rounded-tr-none text-xs text-amber-300/90 leading-relaxed backdrop-blur-sm">
+                            <div className="flex items-center gap-1 text-[9px] font-bold text-amber-400 uppercase tracking-wider mb-1.5">
+                              <Sparkles size={10} /> AI Prepared Draft
+                            </div>
+                            {msg.body}
+                          </div>
+                          <span className="text-[9px] text-[var(--text-muted)] mr-1">
+                            {new Date(msg.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+                })
+              ) : (
+                <div className="m-auto text-center">
+                  <p className="text-xs text-[var(--text-muted)]">No message history.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Decision Panel Details */}
+            {selectedConversation.aiDecision && (
+              <div className="px-4 py-2 border-t border-white/5 bg-slate-900/40">
+                <AiDecisionPanel conversation={selectedConversation} />
+              </div>
+            )}
+
+            {/* Reply Workspace Panel */}
+            <div className="p-4 border-t border-white/5 bg-slate-950/40 shrink-0">
+              <form onSubmit={handleSendCustom} className="flex flex-col gap-3">
+                <div className="relative">
+                  <textarea
+                    placeholder="Type an outbound message, or edit the AI-generated draft..."
+                    className="field-input w-full min-h-24 pr-4 py-2.5 text-xs focus:outline-none resize-none"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    disabled={isPending}
+                  />
+                  {isPending && (
+                    <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
+                      <span className="text-[10px] text-white/70 animate-pulse font-medium">Sending reply...</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleGenerateDraft}
+                      disabled={isPending}
+                      className="btn-secondary text-[10px] py-1.5 px-3"
+                    >
+                      <Sparkles size={11} className="text-amber-400" />
+                      Draft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRunAutomation}
+                      disabled={isPending}
+                      className="btn-secondary text-[10px] py-1.5 px-3"
+                      title="Simulates AI triage trigger"
+                    >
+                      <RefreshCw size={11} className="text-blue-400" />
+                      Run AI
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {selectedConversation.aiReply && selectedConversation.aiReply !== "No AI draft yet." && (
+                      <button
+                        type="button"
+                        onClick={handleSendDraft}
+                        disabled={isPending}
+                        className="btn-approve text-[10px] py-1.5 px-3 flex items-center gap-1"
+                      >
+                        <Check size={11} />
+                        Approve & Send Draft
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={isPending || !replyText.trim()}
+                      className="btn-primary text-[10px] py-1.5 px-3 flex items-center gap-1"
+                    >
+                      <Send size={11} />
+                      Send Custom
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* Safety Rules Banner */}
+              {settings && (
+                <div className="mt-3 flex items-center gap-2 rounded border border-white/5 bg-slate-900/30 px-3 py-2 text-[10px] text-[var(--text-muted)] animate-fade-in">
+                  <Clock size={12} className="text-blue-400 shrink-0" />
+                  <p className="leading-tight">
+                    <strong>Rules Grounding Enforced:</strong> Quiet Hours ({settings.quietHoursStart} - {settings.quietHoursEnd}) · Tourist Tax ({settings.localTouristTaxCzk} CZK) · Czech Compliance RLS active.
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="m-auto text-center flex flex-col gap-2 items-center p-6">
+            <MessageSquare size={32} className="text-[var(--text-muted)] opacity-40" />
+            <p className="text-xs text-[var(--text-muted)]">Select a conversation from the list to start triaging.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function SyncPageContent({ data }: { data: DashboardData }) {
+  const [isPending, startTransition] = useTransition();
+  const [syncStatus, setSyncStatus] = useState<{ success?: boolean; count?: number; error?: string } | null>(null);
+
+  const logs = data.ubyportSyncLogs || [];
+
+  // Calculate sync statistics
+  const stats = useMemo(() => {
+    const totalRuns = logs.length;
+    const successRuns = logs.filter(l => l.status === "success").length;
+    const failedRuns = logs.filter(l => l.status === "failed").length;
+    const totalSyncedCount = logs.filter(l => l.status === "success").reduce((acc, curr) => acc + curr.recordCount, 0);
+    const successRate = totalRuns > 0 ? Math.round((successRuns / totalRuns) * 100) : 100;
+    const lastSyncTime = logs.length > 0 ? new Date(logs[0].createdAt).toLocaleString("en-GB") : "Never";
+
+    return { totalRuns, successRuns, failedRuns, totalSyncedCount, successRate, lastSyncTime };
+  }, [logs]);
+
+  const handleSync = async () => {
+    setSyncStatus(null);
+    startTransition(async () => {
+      try {
+        const result = await triggerUbyportSync();
+        setSyncStatus({ success: true, count: result?.count || 0 });
+      } catch (err) {
+        setSyncStatus({ success: false, error: err instanceof Error ? err.message : "Sync execution failed" });
+      }
+    });
+  };
+
+  return (
+    <div className="grid gap-5">
+      {/* Statistics section */}
+      <section className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="glass-card p-5 flex flex-col justify-between border-l-2 border-blue-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Total Synced Forms</span>
+          <p className="text-3xl font-extrabold text-white mt-1 leading-none">{stats.totalSyncedCount}</p>
+          <span className="text-[10px] text-[var(--text-muted)] mt-2">Exported to Police registry</span>
+        </div>
+        <div className="glass-card p-5 flex flex-col justify-between border-l-2 border-emerald-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Sync Success Rate</span>
+          <p className="text-3xl font-extrabold text-emerald-400 mt-1 leading-none">{stats.successRate}%</p>
+          <span className="text-[10px] text-[var(--text-muted)] mt-2">{stats.successRuns} of {stats.totalRuns} runs succeeded</span>
+        </div>
+        <div className="glass-card p-5 flex flex-col justify-between border-l-2 border-amber-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Last Sync Run</span>
+          <p className="text-lg font-bold text-white mt-2 leading-tight">{stats.lastSyncTime}</p>
+          <span className="text-[10px] text-[var(--text-muted)] mt-2">Automatic schedule active</span>
+        </div>
+        <div className="glass-card p-5 flex flex-col justify-between border-l-2 border-red-500">
+          <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Failed Runs</span>
+          <p className="text-3xl font-extrabold text-red-500 mt-1 leading-none">{stats.failedRuns}</p>
+          <span className="text-[10px] text-[var(--text-muted)] mt-2">Needs manual retry</span>
+        </div>
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+        {/* Sync Trigger and Explanation */}
+        <Panel title="Ubyport Manual Export Trigger">
+          <div className="flex flex-col gap-4">
+            <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+              Under Czech Republic legal guidelines, all foreign tourists visiting Prague properties must be reported to the police registry within 3 working days. The Ubyport API integration automatically takes compliance records marked as <strong>Approved</strong>, compiles them into the official CSV template format, uploads the payload, and records audit logs.
+            </p>
+
+            <div className="rounded-lg bg-slate-900/40 border border-white/5 p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-white">Manual Export Engine</span>
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                  <Check size={8} /> Supabase Integration Ready
+                </span>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Pressing the button below will immediately check for forms in status <code className="text-emerald-400 font-semibold bg-white/5 px-1 rounded">Approved</code>, format them into CZ police standards, trigger the sync, and transition them to <code className="text-slate-400 font-semibold bg-white/5 px-1 rounded">Exported</code>.
+              </p>
+
+              {syncStatus && (
+                <div className={`p-3 rounded border text-xs animate-fade-in ${
+                  syncStatus.success
+                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                    : "bg-red-500/15 border-red-500/30 text-red-300"
+                }`}>
+                  {syncStatus.success ? (
+                    <p>✓ Ubyport Sync completed successfully. Synced <strong>{syncStatus.count}</strong> approved guest compliance records.</p>
+                  ) : (
+                    <p>✗ Sync failed: {syncStatus.error}</p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handleSync}
+                disabled={isPending}
+                className="btn-primary text-xs w-full py-2.5 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(59,130,246,0.25)] hover:scale-[1.01] active:scale-[0.99] transition-transform"
+              >
+                <RefreshCw size={14} className={isPending ? "animate-spin" : ""} />
+                {isPending ? "Syncing with Ubyport..." : "Trigger Manual Sync Now"}
+              </button>
+            </div>
+          </div>
+        </Panel>
+
+        {/* Sync History Logs */}
+        <Panel title="Sync History & Log Audits">
+          {logs.length === 0 ? (
+            <EmptyState text="No sync executions recorded yet." />
+          ) : (
+            <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 text-[var(--text-muted)] uppercase text-[9px] font-bold">
+                    <th className="py-2 px-2">Timestamp</th>
+                    <th className="py-2 px-2">Status</th>
+                    <th className="py-2 px-2">Records</th>
+                    <th className="py-2 px-2">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {logs.map((log) => (
+                    <tr key={log.id} className="hover:bg-white/5 transition-colors">
+                      <td className="py-2.5 px-2 font-mono text-[var(--text-secondary)]">
+                        {new Date(log.createdAt).toLocaleString("en-GB")}
+                      </td>
+                      <td className="py-2.5 px-2">
+                        <span className={`pill ${log.status === "success" ? "pill-success" : "pill-danger"} text-[9px] px-1.5 py-0.5`}>
+                          {log.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2 font-semibold text-white">
+                        {log.recordCount} records
+                      </td>
+                      <td className="py-2.5 px-2 text-[var(--text-muted)] truncate max-w-[150px]" title={log.errorMessage}>
+                        {log.errorMessage || "No errors"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+export function SettingsPageContent({ data }: { data: DashboardData }) {
+  const [isPending, startTransition] = useTransition();
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const settings = data.organizationSettings;
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSuccessMsg(null);
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      try {
+        await updateOrganizationSettings(formData);
+        setSuccessMsg("Organization compliance settings saved successfully.");
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to save settings");
+      }
+    });
+  };
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+      {/* Main Settings Form */}
+      <Panel title="Prague Local Regulations & Compliance Settings">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {successMsg && (
+            <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs rounded animate-fade-in">
+              ✓ {successMsg}
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="field-label">
+              Quiet Hours Start
+              <input
+                type="text"
+                name="quietHoursStart"
+                placeholder="22:00"
+                defaultValue={settings?.quietHoursStart || "22:00"}
+                className="field-input text-xs"
+                required
+                disabled={isPending}
+              />
+            </label>
+            <label className="field-label">
+              Quiet Hours End
+              <input
+                type="text"
+                name="quietHoursEnd"
+                placeholder="06:00"
+                defaultValue={settings?.quietHoursEnd || "06:00"}
+                className="field-input text-xs"
+                required
+                disabled={isPending}
+              />
+            </label>
+          </div>
+
+          <label className="field-label">
+            Local Prague Tourist Tax (CZK per person/night)
+            <input
+              type="number"
+              name="localTouristTaxCzk"
+              placeholder="50"
+              defaultValue={settings?.localTouristTaxCzk ?? 50}
+              className="field-input text-xs"
+              required
+              disabled={isPending}
+            />
+          </label>
+
+          <label className="field-label">
+            Waste & Trash Sorting Guidelines
+            <textarea
+              name="wasteSortingRules"
+              placeholder="E.g., Yellow bins for plastics, blue bins for paper, green for glass. Common garbage bin in the courtyard."
+              defaultValue={settings?.wasteSortingRules || ""}
+              className="field-input min-h-24 text-xs font-sans"
+              required
+              disabled={isPending}
+            />
+          </label>
+
+          <label className="field-label">
+            Other Custom Rules & Prague Quiet Hours Policies
+            <textarea
+              name="otherRules"
+              placeholder="E.g., No parties, smoking is forbidden indoors, keep voice down in communal hallways at all times."
+              defaultValue={settings?.otherRules || ""}
+              className="field-input min-h-24 text-xs font-sans"
+              disabled={isPending}
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={isPending}
+            className="btn-primary self-start text-xs py-2 px-4 shadow-[0_0_12px_rgba(59,130,246,0.2)] mt-2 hover:scale-[1.01] active:scale-[0.99] transition-transform"
+          >
+            {isPending ? "Saving changes..." : "Save Settings"}
+          </button>
+        </form>
+      </Panel>
+
+      {/* Guidance and AI Grounding explanation */}
+      <Panel title="AI Grounding Dashboard Information">
+        <div className="flex flex-col gap-4 text-xs leading-relaxed text-[var(--text-secondary)]">
+          <p>
+            The values configured on this settings dashboard serve as a <strong>dynamic knowledge ground</strong> for the automated AI triage logic.
+          </p>
+
+          <div className="flex gap-3 rounded-lg border border-white/5 bg-slate-900/40 p-4">
+            <Sparkles size={16} className="text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+            <div className="flex flex-col gap-1.5">
+              <span className="font-semibold text-white text-[11px]">How the AI Triage engine integrates settings:</span>
+              <ul className="list-disc list-inside space-y-1 text-[var(--text-tertiary)]">
+                <li>
+                  <strong>Quiet Hours Enforcement:</strong> Inbound queries requesting check-ins or checkout extensions that clash with local quiet hours ({settings?.quietHoursStart || "22:00"} to {settings?.quietHoursEnd || "06:00"}) are automatically identified. The bot declines or flags reviews immediately.
+                </li>
+                <li>
+                  <strong>Tourist Tax Queries:</strong> Auto-reply quotes the local tax amount dynamically (currently configured to <strong>{settings?.localTouristTaxCzk ?? 50} CZK</strong> per guest/night) instead of a hardcoded value.
+                </li>
+                <li>
+                  <strong>Trash Disposal Questions:</strong> Guest inquiries on recycling are answered using your specific waste sorting rules.
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="flex gap-3 rounded-lg border border-white/5 bg-slate-900/40 p-4">
+            <Info size={16} className="text-blue-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-white text-[11px]">Supabase Persistence:</span>
+              <p className="text-[var(--text-tertiary)] mt-1">
+                Data is saved directly in the <code className="text-blue-400 font-mono text-[10px]">organization_settings</code> table. Any change here automatically takes effect on all properties connected to the pilot organization.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -501,7 +1357,7 @@ export function KnowledgePageContent({ data }: { data: DashboardData }) {
 
 function Panel({ action, children, title }: { action?: ReactNode; children: ReactNode; title: string }) {
   return (
-    <section className="panel">
+    <section className="panel animate-fade-in">
       <div className="panel-header">
         <h2 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
         {action}
@@ -513,7 +1369,7 @@ function Panel({ action, children, title }: { action?: ReactNode; children: Reac
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[var(--border-subtle)] p-3">
+    <div className="rounded-lg border border-[var(--border-subtle)] p-3 hover:border-white/10 transition-colors">
       <p className="text-[0.6875rem] font-medium text-[var(--text-muted)]">{label}</p>
       <p className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{value}</p>
     </div>
@@ -624,7 +1480,7 @@ function CasesPanel({ data }: { data: DashboardData }) {
       ) : (
         <div className="grid gap-2.5">
           {data.operationCases.map((item) => (
-            <article className="rounded-lg border border-[var(--border-subtle)] p-3" key={item.id}>
+            <article className="rounded-lg border border-[var(--border-subtle)] p-3 hover:bg-white/5 transition-colors" key={item.id}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-[var(--text-primary)]">{item.title}</h3>
                 <span className={`pill ${riskStyles[item.risk]}`}>{item.risk}</span>
@@ -648,7 +1504,7 @@ function TasksPanel({ data }: { data: DashboardData }) {
       ) : (
         <div className="grid gap-2.5">
           {data.operationTasks.map((item) => (
-            <article className="rounded-lg border border-[var(--border-subtle)] p-3" key={item.id}>
+            <article className="rounded-lg border border-[var(--border-subtle)] p-3 hover:bg-white/5 transition-colors" key={item.id}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold capitalize text-[var(--text-primary)]">{item.taskType.replaceAll("_", " ")}</h3>
                 <span className={`pill ${deliveryStyles[item.deliveryStatus] ?? deliveryStyles.not_sent}`}>{item.deliveryStatus.replace("_", " ")}</span>
@@ -750,8 +1606,8 @@ function CreateKnowledgeForm({ data }: { data: DashboardData }) {
       <PropertySelect properties={data.properties} />
       <Input label="Title" name="title" />
       <Textarea label="Text or Markdown" name="body" />
-      <label className="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)]">
-        <input className="rounded" name="approved" type="checkbox" />
+      <label className="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)] cursor-pointer">
+        <input className="rounded bg-slate-900 border-white/10" name="approved" type="checkbox" />
         Approved for AI
       </label>
       <button className="btn-primary text-xs">
@@ -765,7 +1621,7 @@ function PropertySelect({ properties, selectedId }: { properties: DashboardData[
   return (
     <label className="field-label">
       Property
-      <select className="field-input" defaultValue={selectedId ?? ""} name="propertyId" required>
+      <select className="field-input cursor-pointer" defaultValue={selectedId ?? ""} name="propertyId" required>
         <option value="">Select property</option>
         {properties.map((property) => (
           <option key={property.id} value={property.id}>{property.name}</option>
@@ -795,7 +1651,7 @@ function Textarea({ defaultValue, label, name }: { defaultValue?: string; label:
 
 function SafetyRule({ icon: Icon, text }: { icon: ElementType; text: string }) {
   return (
-    <div className="flex gap-2 rounded-md bg-[var(--bg-muted)] p-2.5 text-xs leading-5 text-[var(--text-secondary)]">
+    <div className="flex gap-2 rounded-md bg-[var(--bg-muted)] p-2.5 text-xs leading-5 text-[var(--text-secondary)] border border-white/5">
       <Icon aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--accent-blue)]" size={13} />
       <p>{text}</p>
     </div>
@@ -853,10 +1709,6 @@ export function OperationsPerformance({ data }: { data: DashboardData }) {
             <span className="flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></span>
               Guest Communication
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>
-              Revenue
             </span>
           </div>
         </div>

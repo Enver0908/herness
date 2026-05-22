@@ -17,6 +17,8 @@ import type {
   OperationTask,
   Property,
   Reservation,
+  OrganizationSettings,
+  UbyportSyncLog,
 } from "./types";
 
 type PropertyRow = {
@@ -47,6 +49,7 @@ type ReservationRow = {
 type ComplianceRow = {
   id: string;
   status: "missing" | "submitted" | "approved" | "exported";
+  ubyport_id: string | null;
   reservations: (ReservationRelation & { departure_date: string | null }) | (ReservationRelation & { departure_date: string | null })[] | null;
   guests: {
     encrypted_full_name: string;
@@ -73,9 +76,32 @@ type ConversationRow = {
   approval_status?: string;
   properties: PropertyRelation | PropertyRelation[] | null;
   messages: {
+    id: string;
     body: string;
     direction: string;
+    created_at: string;
   }[];
+};
+
+type SettingsRow = {
+  id: string;
+  organization_id: string;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  waste_sorting_rules: string;
+  local_tourist_tax_czk: string | number;
+  other_rules: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type SyncLogRow = {
+  id: string;
+  organization_id: string;
+  status: string;
+  record_count: number;
+  error_message: string | null;
+  created_at: string;
 };
 
 type AiDecisionRow = {
@@ -163,7 +189,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const workspace = await ensureWorkspace(authUserId, authUserEmail);
 
-  const [propertiesResult, reservationsResult, complianceResult, conversationsResult, knowledgeResult, casesResult, tasksResult] =
+  const [propertiesResult, reservationsResult, complianceResult, conversationsResult, knowledgeResult, casesResult, tasksResult, settingsResult, syncLogsResult] =
     await Promise.all([
       db
         .from("properties")
@@ -176,13 +202,13 @@ export async function getDashboardData(): Promise<DashboardData> {
         .eq("organization_id", workspace.organizationId),
       db
         .from("compliance_forms")
-        .select("id, status, reservations(guest_display_name, arrival_date, departure_date, check_in_token, properties(name)), guests(encrypted_full_name, encrypted_date_of_birth, encrypted_nationality, encrypted_passport_number)")
+        .select("id, status, ubyport_id, reservations(guest_display_name, arrival_date, departure_date, check_in_token, properties(name)), guests(encrypted_full_name, encrypted_date_of_birth, encrypted_nationality, encrypted_passport_number)")
         .eq("organization_id", workspace.organizationId)
         .order("created_at", { ascending: false }),
       db
         .from("conversations")
         .select(
-          "id, guest_display_name, channel, language, status, risk, source_label, minutes_saved, approval_status, properties(name), messages(body, direction)",
+          "id, guest_display_name, channel, language, status, risk, source_label, minutes_saved, approval_status, properties(name), messages(id, body, direction, created_at)",
         )
         .eq("organization_id", workspace.organizationId)
         .order("updated_at", { ascending: false }),
@@ -203,6 +229,17 @@ export async function getDashboardData(): Promise<DashboardData> {
         .eq("organization_id", workspace.organizationId)
         .order("created_at", { ascending: false })
         .limit(20),
+      db
+        .from("organization_settings")
+        .select("*")
+        .eq("organization_id", workspace.organizationId)
+        .maybeSingle(),
+      db
+        .from("ubyport_sync_logs")
+        .select("*")
+        .eq("organization_id", workspace.organizationId)
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
 
   if (propertiesResult.error) throw propertiesResult.error;
@@ -212,6 +249,8 @@ export async function getDashboardData(): Promise<DashboardData> {
   if (knowledgeResult.error) throw knowledgeResult.error;
   if (casesResult.error) throw casesResult.error;
   if (tasksResult.error) throw tasksResult.error;
+  if (settingsResult.error) throw settingsResult.error;
+  if (syncLogsResult.error) throw syncLogsResult.error;
 
   const reservations = (reservationsResult.data ?? []) as ReservationRow[];
   const reservationItems = reservations.map((reservation): Reservation => {
@@ -266,14 +305,16 @@ export async function getDashboardData(): Promise<DashboardData> {
       }
 
       return {
-      arrivalDate: reservation?.arrival_date ?? "Unknown",
-      checkInToken: reservation?.check_in_token,
-      guestName: reservation?.guest_display_name ?? "Unknown guest",
-      id: record.id,
-      missingFields,
-      nationality: "Hidden",
-      propertyName: property?.name ?? "Unknown property",
-      status: record.status,
+        arrivalDate: reservation?.arrival_date ?? "Unknown",
+        departureDate: reservation?.departure_date ?? undefined,
+        checkInToken: reservation?.check_in_token,
+        guestName: reservation?.guest_display_name ?? "Unknown guest",
+        id: record.id,
+        missingFields,
+        nationality: "Hidden",
+        propertyName: property?.name ?? "Unknown property",
+        status: record.status,
+        ubyportId: record.ubyport_id ?? "N/A",
       };
     },
   );
@@ -318,6 +359,14 @@ export async function getDashboardData(): Promise<DashboardData> {
         risk: conversation.risk,
         source: conversation.source_label ?? "No source",
         status: conversation.status,
+        messages: (conversation.messages ?? [])
+          .map((msg) => ({
+            id: msg.id,
+            direction: msg.direction as "inbound" | "outbound" | "ai_draft",
+            body: msg.body,
+            createdAt: msg.created_at || new Date().toISOString(),
+          }))
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
         aiDecision: decision
           ? {
               canAutoSend: decision.can_auto_send,
@@ -436,6 +485,32 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
   ];
 
+  const settingsRow = settingsResult.data as SettingsRow | null;
+  const organizationSettings = settingsRow
+    ? {
+        id: settingsRow.id,
+        organizationId: settingsRow.organization_id,
+        quietHoursStart: settingsRow.quiet_hours_start,
+        quietHoursEnd: settingsRow.quiet_hours_end,
+        wasteSortingRules: settingsRow.waste_sorting_rules,
+        localTouristTaxCzk: Number(settingsRow.local_tourist_tax_czk),
+        otherRules: settingsRow.other_rules,
+        createdAt: settingsRow.created_at,
+        updatedAt: settingsRow.updated_at,
+      }
+    : undefined;
+
+  const syncLogs = ((syncLogsResult.data ?? []) as SyncLogRow[]).map(
+    (log): UbyportSyncLog => ({
+      id: log.id,
+      organizationId: log.organization_id,
+      status: log.status as "success" | "failed",
+      recordCount: log.record_count,
+      errorMessage: log.error_message ?? undefined,
+      createdAt: log.created_at,
+    }),
+  );
+
   return {
     complianceRecords,
     conversations,
@@ -446,6 +521,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     organizationName: workspace.organizationName,
     properties,
     reservations: reservationItems,
+    organizationSettings,
+    ubyportSyncLogs: syncLogs,
   };
 }
 

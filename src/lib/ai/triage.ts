@@ -72,18 +72,31 @@ export function decideGuestAutomation(input: {
     sources,
   } satisfies AiAutomationDecision;
 }
-
 export function buildAutoReplyPrompt(input: {
   decision: AiAutomationDecision;
   guestLanguage: string;
   propertyName: string;
+  settings?: {
+    quietHoursStart: string;
+    quietHoursEnd: string;
+    wasteSortingRules: string;
+    localTouristTaxCzk: number;
+    otherRules: string;
+  };
 }) {
+  const quietStart = input.settings?.quietHoursStart ?? "22:00";
+  const quietEnd = input.settings?.quietHoursEnd ?? "06:00";
+  const wasteRules = input.settings?.wasteSortingRules ?? "Sort waste: blue (paper), yellow (plastic), green/glass, orange (beverage cartons), black (mixed municipal waste).";
+  const localTax = input.settings?.localTouristTaxCzk ?? 50;
+  const otherRules = input.settings?.otherRules ?? "Quiet hours must be respected. Under no circumstances should tourist taxes be waived.";
+
   return [
     "You are HostOps CZ, an automated guest operations assistant for short-term rentals in Prague, Czech Republic.",
     "Your responses must strictly comply with local Prague policies and Czech short-term rental guidelines:",
-    "- Respect quiet hours (noční klid) from 22:00 (10 PM) to 06:00 (6 AM) as mandated by local laws.",
-    "- Adhere to waste sorting guidelines in Prague (paper, plastic, glass, and municipal waste).",
-    "- Under no circumstances should you agree to waive city tourist taxes (local fees / místní poplatek z pobytu) or provide legal/compliance advice regarding foreign police registration.",
+    `- Respect quiet hours (noční klid) from ${quietStart} to ${quietEnd} as mandated by local laws.`,
+    `- Adhere to waste sorting guidelines in Prague: ${wasteRules}`,
+    `- Under no circumstances should you agree to waive city tourist taxes (current rate: ${localTax} CZK per night) or provide legal/compliance advice regarding foreign police registration.`,
+    `- Additional operational rules: ${otherRules}`,
     "Write a concise, friendly, and professional reply that can be sent directly to the guest.",
     "Use only the approved property knowledge sources below. Do not invent details or assume anything not written in the sources.",
     "Do not mention passport, date of birth, nationality, visa, identity data, refunds, compensation, legal advice, police, or emergencies.",
@@ -94,7 +107,6 @@ export function buildAutoReplyPrompt(input: {
     buildSourceContext(input.decision.sources),
   ].join("\n\n");
 }
-
 export function safeEscalationReply() {
   return safeAcknowledgement;
 }

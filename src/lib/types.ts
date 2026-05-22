@@ -14,6 +14,13 @@ export type Property = {
   knowledgeHealth: number;
 };
 
+export type ConversationMessage = {
+  id: string;
+  direction: "inbound" | "outbound" | "ai_draft";
+  body: string;
+  createdAt: string;
+};
+
 export type Conversation = {
   id: string;
   guestName: string;
@@ -29,6 +36,7 @@ export type Conversation = {
   approvalStatus?: string;
   aiDecision?: AiDecisionSummary;
   aiDecisionHistory: AiDecisionSummary[];
+  messages?: ConversationMessage[];
 };
 
 export type AiDecisionSummary = {
@@ -49,10 +57,12 @@ export type ComplianceRecord = {
   guestName: string;
   propertyName: string;
   arrivalDate: string;
+  departureDate?: string;
   nationality: string;
   status: ComplianceStatus;
   missingFields: string[];
   checkInToken?: string;
+  ubyportId?: string;
 };
 
 export type Metric = {
@@ -71,6 +81,8 @@ export type DashboardData = {
   operationCases: OperationCase[];
   operationTasks: OperationTask[];
   knowledgeDocuments: KnowledgeDocument[];
+  organizationSettings?: OrganizationSettings;
+  ubyportSyncLogs?: UbyportSyncLog[];
 };
 
 export type ComplianceExportRow = {
@@ -130,4 +142,25 @@ export type OperationTask = {
   propertyName: string;
   status: string;
   taskType: string;
+};
+
+export type OrganizationSettings = {
+  id: string;
+  organizationId: string;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  wasteSortingRules: string;
+  localTouristTaxCzk: number;
+  otherRules: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UbyportSyncLog = {
+  id: string;
+  organizationId: string;
+  status: "success" | "failed";
+  recordCount: number;
+  errorMessage?: string;
+  createdAt: string;
 };

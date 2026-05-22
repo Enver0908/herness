@@ -44,6 +44,14 @@ export async function ensureWorkspace(userId: string, email?: string) {
     throw insertMembershipError;
   }
 
+  const { error: insertSettingsError } = await admin.from("organization_settings").insert({
+    organization_id: organization.id,
+  });
+
+  if (insertSettingsError) {
+    throw insertSettingsError;
+  }
+
   return {
     organizationId: organization.id as string,
     organizationName: organization.name as string,

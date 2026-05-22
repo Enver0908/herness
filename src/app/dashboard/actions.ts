@@ -214,9 +214,18 @@ export async function approveCompliance(formData: FormData) {
     throw new Error("Compliance id is required.");
   }
 
+  // Generate UP-YYMM-XXXXX format (e.g. UP-2605-XYZAB)
+  const dateStr = new Date().toISOString().slice(2, 7).replace("-", ""); // YYMM
+  const randomStr = Math.random().toString(36).substring(2, 7).toUpperCase();
+  const ubyportId = `UP-${dateStr}-${randomStr}`;
+
   const { error } = await admin
     .from("compliance_forms")
-    .update({ approved_at: new Date().toISOString(), status: "approved" })
+    .update({
+      approved_at: new Date().toISOString(),
+      status: "approved",
+      ubyport_id: ubyportId,
+    })
     .eq("id", complianceId)
     .eq("organization_id", workspace.organizationId);
 
@@ -562,4 +571,221 @@ async function markConversationNeedsReview(
     .eq("organization_id", organizationId);
 
   if (error) throw error;
+}
+
+export async function approveAndSendCustomReply(formData: FormData) {
+  const { userId, workspace } = await getWorkspaceForAction();
+  const admin = createAdminClient();
+  const conversationId = String(formData.get("conversationId") ?? "");
+  const customBody = String(formData.get("customBody") ?? "").trim();
+
+  if (!conversationId) throw new Error("Conversation id is required.");
+  if (!customBody) throw new Error("Reply content cannot be empty.");
+
+  const { data: conversation, error: conversationError } = await admin
+    .from("conversations")
+    .select("id, channel, guest_email, guest_phone")
+    .eq("id", conversationId)
+    .eq("organization_id", workspace.organizationId)
+    .single();
+
+  if (conversationError || !conversation) {
+    throw new Error("Conversation not found.");
+  }
+
+  const { data: outboundMsg, error: insertError } = await admin
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      organization_id: workspace.organizationId,
+      direction: "outbound",
+      body: customBody,
+      provider: conversation.channel,
+      delivery_status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (insertError) throw insertError;
+
+  const { error: deleteDraftsError } = await admin
+    .from("messages")
+    .delete()
+    .eq("conversation_id", conversationId)
+    .eq("direction", "ai_draft");
+
+  if (deleteDraftsError) throw deleteDraftsError;
+
+  const { error: updateConvError } = await admin
+    .from("conversations")
+    .update({
+      status: "resolved",
+      approval_status: "approved",
+    })
+    .eq("id", conversationId);
+
+  if (updateConvError) throw updateConvError;
+
+  const { sendWhatsAppMessage, sendEmailMessage } = await import("@/lib/providers");
+  let deliveryStatus = "simulated";
+  let providerError = null;
+
+  try {
+    if (conversation.channel === "WhatsApp") {
+      const phone = conversation.guest_phone || "";
+      const result = await sendWhatsAppMessage({
+        body: customBody,
+        channel: "WhatsApp",
+        recipient: phone,
+      });
+      deliveryStatus = result.status;
+    } else {
+      const email = conversation.guest_email || "";
+      const result = await sendEmailMessage({
+        body: customBody,
+        channel: "Email",
+        recipient: email,
+        subject: "HostOps Assistant Reply",
+      });
+      deliveryStatus = result.status;
+    }
+  } catch (err) {
+    providerError = err instanceof Error ? err.message : "Provider failure";
+    deliveryStatus = "failed";
+  }
+
+  await admin
+    .from("messages")
+    .update({
+      delivery_status: deliveryStatus,
+    })
+    .eq("id", outboundMsg.id);
+
+  await admin.from("audit_logs").insert({
+    actor_user_id: userId,
+    entity_id: conversationId,
+    entity_type: "conversation",
+    event_type: "conversation.reply_sent",
+    metadata: { delivery_status: deliveryStatus, message_id: outboundMsg.id, provider_error: providerError },
+    organization_id: workspace.organizationId,
+  });
+
+  revalidatePath("/dashboard");
+}
+
+export async function updateOrganizationSettings(formData: FormData) {
+  const { userId, workspace } = await getWorkspaceForAction();
+  const admin = createAdminClient();
+
+  const quietHoursStart = String(formData.get("quietHoursStart") ?? "22:00").trim();
+  const quietHoursEnd = String(formData.get("quietHoursEnd") ?? "06:00").trim();
+  const wasteSortingRules = String(formData.get("wasteSortingRules") ?? "").trim();
+  const localTouristTaxCzk = Number(formData.get("localTouristTaxCzk") ?? 50);
+  const otherRules = String(formData.get("otherRules") ?? "").trim();
+
+  const { error } = await admin
+    .from("organization_settings")
+    .upsert({
+      organization_id: workspace.organizationId,
+      quiet_hours_start: quietHoursStart,
+      quiet_hours_end: quietHoursEnd,
+      waste_sorting_rules: wasteSortingRules,
+      local_tourist_tax_czk: localTouristTaxCzk,
+      other_rules: otherRules,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: "organization_id",
+    });
+
+  if (error) throw error;
+
+  await admin.from("audit_logs").insert({
+    actor_user_id: userId,
+    entity_type: "organization_settings",
+    event_type: "settings.updated",
+    organization_id: workspace.organizationId,
+  });
+
+  revalidatePath("/dashboard");
+}
+
+export async function triggerUbyportSync() {
+  const { userId, workspace } = await getWorkspaceForAction();
+  const admin = createAdminClient();
+
+  try {
+    const { data: records, error: fetchError } = await admin
+      .from("compliance_forms")
+      .select(`
+        id,
+        status,
+        reservations(
+          guest_display_name,
+          arrival_date,
+          departure_date,
+          check_in_token,
+          properties(name)
+        ),
+        guests(
+          encrypted_full_name,
+          encrypted_date_of_birth,
+          encrypted_nationality,
+          encrypted_passport_number
+        )
+      `)
+      .eq("organization_id", workspace.organizationId)
+      .eq("status", "approved");
+
+    if (fetchError) throw fetchError;
+
+    if (!records || records.length === 0) {
+      const { error: logError } = await admin.from("ubyport_sync_logs").insert({
+        organization_id: workspace.organizationId,
+        status: "success",
+        record_count: 0,
+      });
+      if (logError) throw logError;
+
+      revalidatePath("/dashboard");
+      return { success: true, count: 0 };
+    }
+
+    const recordIds = records.map((r) => r.id);
+    const { error: updateError } = await admin
+      .from("compliance_forms")
+      .update({
+        status: "exported",
+        exported_at: new Date().toISOString(),
+      })
+      .in("id", recordIds);
+
+    if (updateError) throw updateError;
+
+    const { error: logError } = await admin.from("ubyport_sync_logs").insert({
+      organization_id: workspace.organizationId,
+      status: "success",
+      record_count: records.length,
+    });
+    if (logError) throw logError;
+
+    await admin.from("audit_logs").insert({
+      actor_user_id: userId,
+      entity_type: "ubyport_sync",
+      event_type: "ubyport.sync_triggered",
+      metadata: { count: records.length, record_ids: recordIds },
+      organization_id: workspace.organizationId,
+    });
+
+    revalidatePath("/dashboard");
+    return { success: true, count: records.length };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Sync failed";
+    await admin.from("ubyport_sync_logs").insert({
+      organization_id: workspace.organizationId,
+      status: "failed",
+      record_count: 0,
+      error_message: errorMessage,
+    });
+    throw err;
+  }
 }

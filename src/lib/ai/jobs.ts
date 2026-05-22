@@ -156,11 +156,27 @@ async function runAutomation(admin: AdminClient, job: JobRow) {
     propertyName: property?.name ?? "Unknown property",
   });
   const sourceLabel = decision.sources.map((source) => source.title).join(", ");
+
+  const { data: settingsData } = await admin
+    .from("organization_settings")
+    .select("quiet_hours_start, quiet_hours_end, waste_sorting_rules, local_tourist_tax_czk, other_rules")
+    .eq("organization_id", job.organization_id)
+    .maybeSingle();
+
+  const settings = settingsData ? {
+    quietHoursStart: settingsData.quiet_hours_start,
+    quietHoursEnd: settingsData.quiet_hours_end,
+    wasteSortingRules: settingsData.waste_sorting_rules,
+    localTouristTaxCzk: Number(settingsData.local_tourist_tax_czk),
+    otherRules: settingsData.other_rules,
+  } : undefined;
+
   const reply = decision.canAutoSend
     ? (await createOpenAiDraft(buildAutoReplyPrompt({
         decision,
         guestLanguage: typedConversation.language,
         propertyName: property?.name ?? "Unknown property",
+        settings,
       }))).text
     : safeEscalationReply();
 
