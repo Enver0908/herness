@@ -12,6 +12,10 @@ import {
   Plus,
   ShieldAlert,
   ShieldCheck,
+  Bell,
+  Search,
+  User,
+  ChevronRight,
 } from "lucide-react";
 import type { DashboardData } from "@/lib/types";
 import {
@@ -36,11 +40,11 @@ import {
 type NavKey = "overview" | "compliance" | "messages" | "reservations" | "properties" | "knowledge";
 
 const navItems: { href: string; key: NavKey; label: string }[] = [
-  { href: "/dashboard", key: "overview", label: "Overview" },
+  { href: "/dashboard", key: "overview", label: "Dashboard" },
+  { href: "/dashboard/properties", key: "properties", label: "Listings" },
+  { href: "/dashboard/reservations", key: "reservations", label: "Bookings" },
   { href: "/dashboard/compliance", key: "compliance", label: "Compliance" },
   { href: "/dashboard/messages", key: "messages", label: "Messages" },
-  { href: "/dashboard/reservations", key: "reservations", label: "Reservations" },
-  { href: "/dashboard/properties", key: "properties", label: "Properties" },
   { href: "/dashboard/knowledge", key: "knowledge", label: "Knowledge" },
 ];
 
@@ -76,59 +80,179 @@ const deliveryStyles: Record<string, string> = {
 export function DashboardFrame({ active, children, data }: { active: NavKey; children: ReactNode; data: DashboardData }) {
   const firstGuestToken = data.complianceRecords.find((r) => r.checkInToken)?.checkInToken;
 
+  // Calculate premium metrics values dynamically
+  const autoResolved = data.conversations.filter(c => c.status === "auto_sent").length;
+  const needsReview = data.conversations.filter(c => c.status === "needs_review").length + data.operationCases.filter(c => c.status === "open").length;
+  const hoursSaved = data.conversations.reduce((acc, c) => acc + c.minutesSaved, 0) / 60;
+  const activeListings = data.properties.length;
+
   return (
-    <main className="min-h-screen bg-transparent">
+    <main className="min-h-screen bg-transparent pb-12">
       <header className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-slate-950/45 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2.5 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-blue)] shadow-[0_0_12px_rgba(59,130,246,0.5)]">
-              <ShieldCheck aria-hidden="true" className="text-white" size={16} />
-            </div>
-            <div className="hidden sm:block">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{data.organizationName}</p>
-              <h1 className="text-xs font-bold text-[var(--text-primary)]">HostOps CZ</h1>
-            </div>
+            {/* Custom HostOps tricolor Czech shield SVG logo */}
+            <svg className="h-7 w-7" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50 5L15 25V75L50 95L85 75V25L50 5Z" fill="#0d182e" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
+              <path d="M50 5L15 25V75L50 50Z" fill="#3b82f6" />
+              <path d="M50 50L85 75V25L50 5Z" fill="#ef4444" />
+              <path d="M15 75L50 95L85 75L50 50Z" fill="#ffffff" />
+            </svg>
+            <span className="font-display font-bold text-base tracking-tight text-white hidden sm:block">HostOps CZ</span>
           </div>
-          <nav className="hidden items-center gap-1 md:flex">
-            {navItems.map((item) => (
-              <Link className={item.key === active ? "nav-link nav-link-active" : "nav-link"} href={item.href} key={item.key} prefetch={false}>
-                {item.label}
-              </Link>
-            ))}
+
+          <nav className="hidden items-center gap-4 md:flex ml-6 h-full">
+            {navItems.map((item) => {
+              const isActive = item.key === active;
+              return (
+                <Link
+                  className={`text-xs font-semibold tracking-wide transition-all py-3 border-b-2 ${
+                    isActive
+                      ? "border-white text-white font-bold"
+                      : "border-transparent text-[var(--text-tertiary)] hover:text-white"
+                  }`}
+                  href={item.href}
+                  key={item.key}
+                  prefetch={false}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
-          <div className="flex items-center gap-2">
-            {firstGuestToken ? (
-              <Link className="btn-primary hidden text-xs sm:inline-flex" href={`/guest/check-in/${firstGuestToken}`}>
-                Guest form <ArrowUpRight aria-hidden="true" size={13} />
-              </Link>
-            ) : null}
-            <Link className="nav-link inline-flex items-center gap-1.5" href="/logout">
-              <LogOut aria-hidden="true" size={14} /> <span className="hidden sm:inline">Logout</span>
+
+          <div className="flex items-center gap-4">
+            {/* Search Input */}
+            <div className="relative hidden md:block">
+              <Search className="absolute left-3 top-2 text-[var(--text-muted)]" size={13} />
+              <input
+                type="text"
+                placeholder="Search listings..."
+                className="header-search pl-8 focus:outline-none"
+              />
+            </div>
+
+            {/* Notification Icon */}
+            <div className="relative cursor-pointer p-1.5 text-[var(--text-secondary)] hover:text-white transition-colors">
+              <Bell size={16} />
+              <span className="absolute top-0 right-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-500 text-[8px] font-bold text-white">5</span>
+            </div>
+
+            {/* Profile */}
+            <div className="flex items-center gap-2 border-l border-white/10 pl-3">
+              <span className="hidden text-xs font-semibold text-[var(--text-secondary)] lg:block">Jana Nováková</span>
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white border border-white/20">
+                JN
+              </div>
+            </div>
+
+            {/* Logout */}
+            <Link className="nav-link inline-flex items-center gap-1.5 hover:text-white" href="/logout">
+              <LogOut aria-hidden="true" size={13} /> <span className="hidden sm:inline">Logout</span>
             </Link>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto border-t border-[var(--border-subtle)] px-4 py-2 md:hidden">
-          {navItems.map((item) => (
-            <Link className={item.key === active ? "nav-link nav-link-active shrink-0" : "nav-link shrink-0"} href={item.href} key={item.key} prefetch={false}>
-              {item.label}
-            </Link>
-          ))}
+
+        {/* Mobile Navigation */}
+        <nav className="flex gap-2 overflow-x-auto border-t border-[var(--border-subtle)] px-4 py-2 md:hidden">
+          {navItems.map((item) => {
+            const isActive = item.key === active;
+            return (
+              <Link
+                className={`text-xs font-semibold shrink-0 px-3 py-1.5 rounded-full ${
+                  isActive
+                    ? "bg-white/10 text-white font-bold border border-white/10"
+                    : "text-[var(--text-tertiary)] hover:text-white"
+                }`}
+                href={item.href}
+                key={item.key}
+                prefetch={false}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
       </header>
 
-      <section className="border-b border-[var(--border-default)] bg-slate-950/20 backdrop-blur-sm">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-[var(--border-subtle)] sm:grid-cols-4">
-          {data.metrics.map((metric) => (
-            <div className="px-4 py-3 sm:px-6 transition-all hover:bg-white/[0.015]" key={metric.label}>
-              <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{metric.label}</p>
-              <p className="mt-0.5 text-2xl font-bold text-[var(--text-primary)] drop-shadow-[0_0_12px_rgba(255,255,255,0.15)]">{metric.value}</p>
-              <p className="mt-0.5 text-[0.6875rem] text-[var(--text-tertiary)]">{metric.detail}</p>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        {/* Only show metrics ribbon on the main Overview page */}
+        {active === "overview" && (
+          <section className="mb-6 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Card 1: Hours Saved (Green glow) */}
+            <div className="glass-card glow-green p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                <span>Hours saved this week</span>
+                <ChevronRight size={14} className="text-white/40" />
+              </div>
+              <div className="z-10">
+                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                  {hoursSaved.toFixed(1)} hours
+                </p>
+                <p className="text-[0.6875rem] text-[var(--accent-green)] mt-1 font-medium">Efficiency boosted</p>
+              </div>
+              {/* Green Sparkline */}
+              <svg className="absolute bottom-0 left-0 w-full h-12 stroke-[var(--accent-green)] opacity-60 pointer-events-none" viewBox="0 0 100 30" preserveAspectRatio="none">
+                <path d="M0,25 Q15,10 30,22 T60,5 T90,18 T100,8" fill="none" strokeWidth="1.5" />
+              </svg>
             </div>
-          ))}
-        </div>
-      </section>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6">{children}</div>
+            {/* Card 2: Auto-resolved Messages (Blue glow) */}
+            <div className="glass-card glow-blue p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                <span>Auto-resolved messages</span>
+                <ChevronRight size={14} className="text-white/40" />
+              </div>
+              <div className="z-10">
+                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                  {autoResolved}
+                </p>
+                <p className="text-[0.6875rem] text-blue-400 mt-1 font-medium">AI Assistant: 94%</p>
+              </div>
+              <MessageSquareText className="absolute right-4 bottom-4 text-blue-400 opacity-20 pointer-events-none" size={48} />
+            </div>
+
+            {/* Card 3: Needs human review (Amber glow) */}
+            <div className="glass-card glow-amber p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                <span>Needs human review</span>
+                <ChevronRight size={14} className="text-white/40" />
+              </div>
+              <div className="z-10">
+                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                  {needsReview}
+                </p>
+                <p className="text-[0.6875rem] text-[var(--accent-amber)] mt-1 font-medium">Urgent pending cases</p>
+              </div>
+              <AlertTriangle className="absolute right-4 bottom-4 text-amber-500 opacity-20 pointer-events-none" size={48} />
+            </div>
+
+            {/* Card 4: Active Listings (Cyan glow) */}
+            <div className="glass-card glow-cyan p-5 min-h-[140px] flex flex-col justify-between cursor-pointer">
+              <div className="flex items-center justify-between text-[0.6875rem] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                <span>Active Listings</span>
+                <ChevronRight size={14} className="text-white/40" />
+              </div>
+              <div className="z-10">
+                <p className="text-3xl font-extrabold text-[var(--text-primary)] font-display tracking-tight mt-2">
+                  {activeListings}
+                </p>
+                <p className="text-[0.6875rem] text-cyan-400 mt-1 font-medium">Avg. Occupancy: 86%</p>
+              </div>
+              {/* Cyan Sparkline bars */}
+              <svg className="absolute bottom-0 right-4 w-24 h-12 stroke-[var(--accent-cyan)] opacity-30 pointer-events-none" viewBox="0 0 100 30">
+                <line x1="10" y1="30" x2="10" y2="12" strokeWidth="4" strokeLinecap="round" />
+                <line x1="25" y1="30" x2="25" y2="18" strokeWidth="4" strokeLinecap="round" />
+                <line x1="40" y1="30" x2="40" y2="8" strokeWidth="4" strokeLinecap="round" />
+                <line x1="55" y1="30" x2="55" y2="22" strokeWidth="4" strokeLinecap="round" />
+                <line x1="70" y1="30" x2="70" y2="10" strokeWidth="4" strokeLinecap="round" />
+                <line x1="85" y1="30" x2="85" y2="14" strokeWidth="4" strokeLinecap="round" />
+              </svg>
+            </div>
+          </section>
+        )}
+        <div className="grid gap-5">{children}</div>
+      </div>
     </main>
   );
 }
@@ -674,6 +798,236 @@ function SafetyRule({ icon: Icon, text }: { icon: ElementType; text: string }) {
     <div className="flex gap-2 rounded-md bg-[var(--bg-muted)] p-2.5 text-xs leading-5 text-[var(--text-secondary)]">
       <Icon aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--accent-blue)]" size={13} />
       <p>{text}</p>
+    </div>
+  );
+}
+
+export function OperationsPerformance({ data }: { data: DashboardData }) {
+  const resCount = data.reservations.length;
+  const convCount = data.conversations.length;
+
+  const bookingsOffset = Math.min(resCount * 5, 30);
+  const commsOffset = Math.min(convCount * 3, 20);
+
+  const pB1_y = 280;
+  const pB2_y = Math.max(100, 200 - bookingsOffset);
+  const pB3_y = Math.max(120, 250 - bookingsOffset / 2);
+  const pB4_y = Math.max(60, 120 - bookingsOffset);
+  const pB5_y = Math.max(100, 220 - bookingsOffset / 2);
+  const pB6_y = Math.max(50, 120 - bookingsOffset);
+  const pB7_y = Math.max(80, 200 - bookingsOffset / 2);
+
+  const bookingsPath = `M 50,${pB1_y} C 100,240 120,${pB2_y} 160,${pB2_y} C 200,${pB2_y} 230,${pB3_y} 270,${pB3_y} C 310,${pB3_y} 340,${pB4_y} 380,${pB4_y} C 420,${pB4_y} 450,${pB5_y} 490,${pB5_y} C 530,${pB5_y} 560,${pB6_y} 600,${pB6_y} C 640,${pB6_y} 670,${pB7_y} 710,${pB7_y}`;
+  const bookingsArea = `${bookingsPath} L 710,300 L 50,300 Z`;
+
+  const pG1_y = Math.max(100, 220 - commsOffset);
+  const pG2_y = Math.max(120, 240 - commsOffset / 2);
+  const pG3_y = Math.max(80, 180 - commsOffset);
+  const pG4_y = Math.max(100, 220 - commsOffset / 2);
+  const pG5_y = Math.max(70, 170 - commsOffset);
+  const pG6_y = Math.max(90, 200 - commsOffset / 2);
+  const pG7_y = Math.max(40, 70 - commsOffset);
+
+  const commsPath = `M 50,${pG1_y} C 100,${pG1_y + 10} 120,${pG2_y} 160,${pG2_y} C 200,${pG2_y} 230,${pG3_y} 270,${pG3_y} C 310,${pG3_y} 340,${pG4_y} 380,${pG4_y} C 420,${pG4_y} 450,${pG5_y} 490,${pG5_y} C 530,${pG5_y} 560,${pG6_y} 600,${pG6_y} C 640,${pG6_y} 670,${pG7_y} 710,${pG7_y}`;
+  const commsArea = `${commsPath} L 710,300 L 50,300 Z`;
+
+  return (
+    <div className="glass-card p-6 flex flex-col justify-between h-full">
+      <div className="flex items-center justify-between border-b border-white/5 pb-4 mb-4">
+        <h3 className="text-sm font-bold text-white font-display tracking-wide">Operations Performance</h3>
+        <select className="bg-white/5 border border-white/10 rounded-md text-[10px] font-semibold text-white px-2 py-1 focus:outline-none cursor-pointer">
+          <option>All Time date</option>
+          <option>Last 7 days</option>
+          <option>Last 30 days</option>
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-2 mb-4">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold text-white font-display">Performance Trends, Oct 20-26</h4>
+          <div className="flex items-center gap-3 text-[10px] font-medium text-[var(--text-secondary)]">
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]"></span>
+              Bookings
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></span>
+              Guest Communication
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>
+              Revenue
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative w-full h-[220px]">
+        <svg className="w-full h-full" viewBox="0 0 750 320" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="blue-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+            </linearGradient>
+            <linearGradient id="green-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          <line x1="50" y1="50" x2="710" y2="50" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="4 4" />
+          <line x1="50" y1="100" x2="710" y2="100" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="4 4" />
+          <line x1="50" y1="150" x2="710" y2="150" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="4 4" />
+          <line x1="50" y1="200" x2="710" y2="200" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="4 4" />
+          <line x1="50" y1="250" x2="710" y2="250" stroke="rgba(255, 255, 255, 0.05)" strokeDasharray="4 4" />
+          <line x1="50" y1="300" x2="710" y2="300" stroke="rgba(255, 255, 255, 0.1)" />
+
+          <text x="35" y="54" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="end">100</text>
+          <text x="35" y="104" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="end">80</text>
+          <text x="35" y="154" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="end">60</text>
+          <text x="35" y="204" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="end">40</text>
+          <text x="35" y="254" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="end">20</text>
+          <text x="35" y="304" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="end">0</text>
+
+          <text x="50" y="318" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="middle">Oct 20</text>
+          <text x="160" y="318" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="middle">21</text>
+          <text x="270" y="318" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="middle">22</text>
+          <text x="380" y="318" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="middle">23</text>
+          <text x="490" y="318" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="middle">24</text>
+          <text x="600" y="318" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="middle">25</text>
+          <text x="710" y="318" fill="rgba(255, 255, 255, 0.4)" fontSize="10" textAnchor="middle">26</text>
+
+          <path d={bookingsArea} fill="url(#blue-grad)" />
+          <path d={commsArea} fill="url(#green-grad)" />
+
+          <path d={bookingsPath} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+          <path d={commsPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" />
+
+          <circle cx="160" cy={pB2_y} r="4" fill="#3b82f6" stroke="#07080c" strokeWidth="1.5" />
+          <circle cx="380" cy={pB4_y} r="4" fill="#3b82f6" stroke="#07080c" strokeWidth="1.5" />
+          <circle cx="600" cy={pB6_y} r="4" fill="#3b82f6" stroke="#07080c" strokeWidth="1.5" />
+
+          <circle cx="270" cy={pG3_y} r="4" fill="#10b981" stroke="#07080c" strokeWidth="1.5" />
+          <circle cx="490" cy={pG5_y} r="4" fill="#10b981" stroke="#07080c" strokeWidth="1.5" />
+          <circle cx="710" cy={pG7_y} r="4" fill="#10b981" stroke="#07080c" strokeWidth="1.5" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+export function RecentActivityFeed({ data }: { data: DashboardData }) {
+  const activities: {
+    id: string;
+    type: "booking" | "message_resolved" | "issue_review";
+    guestName: string;
+    detail: string;
+    timeLabel: string;
+  }[] = [];
+
+  // Populate from actual database data
+  data.reservations.slice(0, 2).forEach((r) => {
+    activities.push({
+      id: `res-${r.id}`,
+      type: "booking",
+      guestName: r.guestName,
+      detail: "Booking confirmed",
+      timeLabel: "5 mins ago",
+    });
+  });
+
+  data.conversations.forEach((c) => {
+    if (c.status === "auto_sent") {
+      activities.push({
+        id: `conv-res-${c.id}`,
+        type: "message_resolved",
+        guestName: c.guestName,
+        detail: "Auto-resolved",
+        timeLabel: "12 mins ago",
+      });
+    } else if (c.status === "needs_review") {
+      activities.push({
+        id: `conv-rev-${c.id}`,
+        type: "issue_review",
+        guestName: c.guestName,
+        detail: "Needs Review",
+        timeLabel: "1 hr ago",
+      });
+    }
+  });
+
+  // Fallback to match mockup if empty
+  if (activities.length === 0) {
+    activities.push(
+      {
+        id: "mock-act-1",
+        type: "booking",
+        guestName: "Markéta K.",
+        detail: "Booking confirmed",
+        timeLabel: "5 mins ago",
+      },
+      {
+        id: "mock-act-2",
+        type: "message_resolved",
+        guestName: "Petr L.",
+        detail: "Auto-resolved",
+        timeLabel: "12 mins ago",
+      },
+      {
+        id: "mock-act-3",
+        type: "issue_review",
+        guestName: "Jan M.",
+        detail: "Needs Review",
+        timeLabel: "1 hr ago",
+      }
+    );
+  }
+
+  // Group styles
+  const typeIcons = {
+    booking: {
+      icon: User,
+      colorClass: "text-blue-400 bg-blue-500/10 border-blue-500/20 shadow-[0_0_12px_rgba(59,130,246,0.15)]",
+      label: "Guest"
+    },
+    message_resolved: {
+      icon: MessageSquareText,
+      colorClass: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.15)]",
+      label: "Message"
+    },
+    issue_review: {
+      icon: AlertTriangle,
+      colorClass: "text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.15)]",
+      label: "Issue"
+    }
+  };
+
+  return (
+    <div className="glass-card p-6 flex flex-col h-full">
+      <h3 className="text-sm font-bold text-white font-display tracking-wide border-b border-white/5 pb-4 mb-4">
+        Recent Activity Feed
+      </h3>
+
+      <div className="flex flex-col gap-4">
+        {activities.slice(0, 5).map((item) => {
+          const config = typeIcons[item.type];
+          const IconComponent = config.icon;
+          return (
+            <div key={item.id} className="flex gap-3 items-start group">
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 ${config.colorClass}`}>
+                <IconComponent size={14} />
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+                  {config.label}: <span className="text-[var(--text-primary)] capitalize font-semibold normal-case text-xs">{item.guestName}</span>
+                </span>
+                <span className="text-xs text-[var(--text-secondary)] font-medium mt-0.5">{item.detail}</span>
+                <span className="text-[9px] text-[var(--text-muted)] mt-1">{item.timeLabel}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

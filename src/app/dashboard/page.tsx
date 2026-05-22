@@ -3,8 +3,8 @@ import { requireDashboardData } from "./data";
 import {
   DashboardFrame,
   EmptyState,
-  OperationsSummary,
-  RecentMessages,
+  OperationsPerformance,
+  RecentActivityFeed,
   SetupScreen,
 } from "./ui";
 
@@ -16,32 +16,31 @@ export default async function DashboardPage() {
 
   return (
     <DashboardFrame active="overview" data={data}>
-      <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <OperationsSummary data={data} />
-        <RecentMessages conversations={data.conversations.slice(0, 4)} />
+      {/* Dashboard Overview Title row */}
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center mb-2">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-white font-display">Dashboard Overview</h1>
+          <p className="text-xs text-[var(--text-tertiary)]">Welcome back, Jana! (Last updated 2 mins ago)</p>
+        </div>
+        <div className="text-xs font-semibold text-[var(--text-muted)] bg-white/5 border border-white/10 rounded-md px-3 py-1.5 backdrop-blur-sm">
+          {new Date().toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </div>
       </div>
-      <section className="panel">
-        <div className="panel-header">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Today&apos;s focus</h2>
-        </div>
-        <div className="panel-body grid gap-3 md:grid-cols-3">
-          <FocusTile label="Open cases" value={String(data.operationCases.filter((c) => c.status === "open").length)} />
-          <FocusTile label="Pending tasks" value={String(data.operationTasks.filter((t) => t.status === "pending").length)} />
-          <FocusTile label="Missing compliance" value={String(data.complianceRecords.filter((r) => r.status === "missing").length)} />
-        </div>
-      </section>
+
+      {/* Main Grid: SVG Performance trends and timeline feed */}
+      <div className="grid gap-5 lg:grid-cols-[2.1fr_0.9fr]">
+        <OperationsPerformance data={data} />
+        <RecentActivityFeed data={data} />
+      </div>
+
       {data.properties.length === 0 ? (
         <EmptyState text="Start by adding a property from the Properties page." />
       ) : null}
     </DashboardFrame>
-  );
-}
-
-function FocusTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-muted)] p-3">
-      <p className="text-[0.6875rem] font-medium text-[var(--text-muted)]">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{value}</p>
-    </div>
   );
 }
